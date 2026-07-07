@@ -143,8 +143,12 @@ export function CheckRunner({ project, tool, checks, index, states, onSave, onNa
 
       {tool === 'tw' && (
         <div class="card">
-          <h2>Word article</h2>
-          {article == null ? <p class="muted">Loading article…</p> : <Markdown text={article} />}
+          <details class="about">
+            <summary>
+              📖 Word article{article ? `: ${/^#+\s*(.+)$/m.exec(article)?.[1] || ''}` : ''}
+            </summary>
+            {article == null ? <p class="muted">Loading article…</p> : <Markdown text={article} />}
+          </details>
         </div>
       )}
       {tool === 'tn' && check.groupId !== 'other' && (
