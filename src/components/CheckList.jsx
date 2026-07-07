@@ -29,9 +29,13 @@ export function CheckList({ checks, states, onOpen }) {
                 <div class="item-title">
                   {check.reference} {check.tool === 'tw' ? `· ${check.term}` : ''}
                 </div>
-                <div class="item-sub">
-                  {check.quote || (check.note || '').split('\n')[0].slice(0, 80)}
-                </div>
+                {state?.selections?.length ? (
+                  <div class="item-sub item-sel">“{state.selections.map((s) => s.text).join(' … ')}”</div>
+                ) : (
+                  <div class="item-sub">
+                    {check.quote || (check.note || '').split('\n')[0].slice(0, 80)}
+                  </div>
+                )}
               </div>
               {state?.comment ? <span title="has comment">💬</span> : null}
             </div>

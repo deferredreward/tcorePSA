@@ -92,6 +92,7 @@ button:disabled { opacity: 0.45; }
 .project-item:active, .tool-item:active, .check-item:active { background: #eef6fb; }
 .item-title { font-weight: 600; color: var(--ocean); }
 .item-sub { font-size: 0.8rem; color: var(--muted); }
+.item-sel { color: var(--ocean); font-style: italic; }
 .grow { flex: 1; min-width: 0; }
 
 .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
