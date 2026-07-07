@@ -3,6 +3,8 @@ import preact from '@preact/preset-vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  // served from https://deferredreward.github.io/tcorePSA/
+  base: process.env.GITHUB_ACTIONS ? '/tcorePSA/' : '/',
   plugins: [
     preact(),
     VitePWA({
