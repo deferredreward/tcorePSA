@@ -12,6 +12,13 @@ import { Markdown } from './Markdown';
 
 const EMPTY_STATE = { selections: [], comment: '', reminder: false, nothingToSelect: false };
 
+// Short definition shown non-collapsed (like tC's check info card):
+// first real paragraph of the tA article, skipping headings
+function firstParagraph(md) {
+  const chunks = (md || '').split(/\n\s*\n/).map((s) => s.trim());
+  return chunks.find((s) => s && !s.startsWith('#')) || '';
+}
+
 function TappableVerse({ verseText, selections, disabled, onChange }) {
   const segments = useMemo(() => verseSegments(verseText, selections), [verseText, selections]);
 
@@ -165,10 +172,18 @@ export function CheckRunner({ project, tool, checks, index, states, onSave, onNa
       )}
       {tool === 'tn' && check.groupId !== 'other' && (
         <div class="card">
-          <details class="about">
-            <summary>About “{title || check.groupId}” checks</summary>
-            {article == null ? <p class="muted">Loading…</p> : <Markdown text={article} />}
-          </details>
+          <h2>{title || check.groupId}</h2>
+          {article == null ? (
+            <p class="muted">Loading…</p>
+          ) : (
+            <>
+              <Markdown text={firstParagraph(article)} />
+              <details class="about">
+                <summary>Read more</summary>
+                <Markdown text={article} />
+              </details>
+            </>
+          )}
         </div>
       )}
 
