@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tcore-pwa",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "C:/Users/benja/Documents/GitHub/tcc-ge-dcs/tcorePSA",
+      "port": 5173
+    }
+  ]
+}

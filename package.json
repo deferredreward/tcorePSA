@@ -1,0 +1,25 @@
+{
+  "name": "tcore-pwa",
+  "private": true,
+  "version": "0.1.0",
+  "description": "translationCore notes & words checks as a mobile-friendly offline PWA",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.2.1",
+    "marked": "^12.0.2",
+    "preact": "^10.25.4",
+    "selections": "0.1.7",
+    "string-punctuation-tokenizer": "^2.2.0",
+    "usfm-js": "3.4.3"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.9.3",
+    "vite": "^5.4.11",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}
