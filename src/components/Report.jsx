@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { groupChecks } from '../lib/checks';
 import { groupTitle } from '../lib/titles';
+import { buildReportMarkdown, downloadText } from '../lib/report';
 import { isDone } from './CheckList';
 
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
@@ -68,9 +69,16 @@ function ToolReport({ tool, checks, states }) {
   );
 }
 
-export function Report({ checks, states, skipped }) {
+export function Report({ project, checks, states, skipped }) {
+  async function download() {
+    const md = await buildReportMarkdown(project, checks, states, skipped);
+    downloadText(`${project.bookCode}-check-report.md`, md);
+  }
   return (
     <div class="screen">
+      <button class="primary" style="width:100%;margin-bottom:12px" onClick={download}>
+        ⬇ Download report (.md)
+      </button>
       {(skipped.tn > 0 || skipped.tw > 0) && (
         <p class="muted">
           {skipped.tn + skipped.tw} checks fall outside the portion you uploaded and are not

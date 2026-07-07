@@ -191,7 +191,7 @@ export function App() {
       )}
 
       {route.view === 'report' && checks && (
-        <Report checks={checks} states={states} skipped={skipped} />
+        <Report project={project} checks={checks} states={states} skipped={skipped} />
       )}
     </>
   );

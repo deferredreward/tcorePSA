@@ -49,11 +49,11 @@ export function Home({ onOpen }) {
     }
   }
 
-  async function loadSample() {
+  async function loadSample(code) {
     setError(null);
     setBusy(true);
     try {
-      const usfm = await fetchSampleUsfm(usfmFileNumber('TIT'), 'TIT');
+      const usfm = await fetchSampleUsfm(usfmFileNumber(code), code);
       const project = await addProject(usfm, 'en_ULT sample');
       onOpen(project.id);
     } catch (err) {
@@ -89,8 +89,11 @@ export function Home({ onOpen }) {
               onChange={onFile}
             />
           </label>
-          <button class="secondary" onClick={loadSample} disabled={busy}>
-            {busy ? 'Loading…' : 'Load sample (Titus)'}
+          <button class="secondary" onClick={() => loadSample('TIT')} disabled={busy}>
+            {busy ? 'Loading…' : 'Sample: Titus (NT)'}
+          </button>
+          <button class="secondary" onClick={() => loadSample('RUT')} disabled={busy}>
+            {busy ? 'Loading…' : 'Sample: Ruth (OT)'}
           </button>
         </div>
         {error && <p class="error">{error}</p>}
