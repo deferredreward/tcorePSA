@@ -88,11 +88,23 @@ export function CheckRunner({ project, tool, checks, index, states, onSave, onNa
             {check.reference} · {index + 1}/{checks.length}
           </span>
         </div>
-        {check.quote && (
+        {tool === 'tw' ? (
           <div class="check-quote">
-            {check.quote}
-            {check.occurrence > 1 ? <span class="muted"> (occurrence {check.occurrence})</span> : ''}
+            <div class="tw-term">
+              {(article && /^#+\s*(.+)$/m.exec(article)?.[1]) || title || check.term}
+            </div>
+            <div class="tw-orig">
+              {check.quote}
+              {check.occurrence > 1 ? ` (occurrence ${check.occurrence})` : ''}
+            </div>
           </div>
+        ) : (
+          check.quote && (
+            <div class="check-quote">
+              {check.quote}
+              {check.occurrence > 1 ? <span class="muted"> (occurrence {check.occurrence})</span> : ''}
+            </div>
+          )
         )}
         {tool === 'tn' && <Markdown text={check.note} />}
       </div>

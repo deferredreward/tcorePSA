@@ -132,6 +132,14 @@ button:disabled { opacity: 0.45; }
   padding: 3px 2px;
   cursor: pointer;
 }
+.tw-term {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--ocean);
+}
+.tw-orig { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+
 .note-body { font-size: 0.95rem; line-height: 1.55; overflow-wrap: break-word; }
 .note-body h1, .note-body h2, .note-body h3 { font-size: 1rem; color: var(--ocean); margin: 10px 0 4px; }
 .note-body p { margin: 6px 0; }
