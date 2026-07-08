@@ -4,8 +4,9 @@ import { CheckList, checkProgress } from './components/CheckList';
 import { GroupList } from './components/GroupList';
 import { CheckRunner } from './components/CheckRunner';
 import { Report } from './components/Report';
-import { fetchTnTsv, fetchTwlTsv } from './lib/door43';
+import { fetchTnTsv, fetchTwlTsv, fetchUltUsfm } from './lib/door43';
 import { parseTnChecks, parseTwChecks, groupChecks } from './lib/checks';
+import { parseAlignments } from './lib/alignment';
 import { getVerseText } from './lib/verses';
 import { getProject, getCheckStates, saveCheckState } from './lib/store';
 
@@ -17,6 +18,7 @@ export function App() {
   const [checks, setChecks] = useState(null); // {tn: [], tw: []} filtered to uploaded verses
   const [skipped, setSkipped] = useState({ tn: 0, tw: 0 });
   const [states, setStates] = useState({});
+  const [alignments, setAlignments] = useState(null); // ULT word alignments for English glosses
   const [loadError, setLoadError] = useState(null);
 
   const groups = useMemo(
@@ -28,11 +30,17 @@ export function App() {
     setRoute({ view: 'project' });
     setProject(null);
     setChecks(null);
+    setAlignments(null);
     setLoadError(null);
     try {
       const p = await getProject(id);
       setProject(p);
       setStates(await getCheckStates(id));
+      // Load the aligned ULT in the background — it powers the English gloss of
+      // each original-language quote, but checks shouldn't wait on it.
+      fetchUltUsfm(p.bookCode)
+        .then((usfmText) => setAlignments(parseAlignments(usfmText)))
+        .catch(() => {});
       const [tnTsv, twlTsv] = await Promise.all([
         fetchTnTsv(p.bookCode),
         fetchTwlTsv(p.bookCode),
@@ -185,6 +193,7 @@ export function App() {
           checks={activeChecks()}
           index={route.index}
           states={states}
+          alignments={alignments}
           onSave={onSaveState}
           onNavigate={(index) => setRoute({ ...route, index })}
         />

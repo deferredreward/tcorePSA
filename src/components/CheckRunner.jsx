@@ -6,6 +6,7 @@ import {
   removeSelection,
 } from '../lib/selectionEngine';
 import { getVerseText } from '../lib/verses';
+import { getVerseAligns, glossQuote } from '../lib/alignment';
 import { fetchTwArticle, fetchTaArticle } from '../lib/door43';
 import { groupTitle } from '../lib/titles';
 import { Markdown } from './Markdown';
@@ -59,10 +60,17 @@ function TappableVerse({ verseText, selections, disabled, onChange }) {
   );
 }
 
-export function CheckRunner({ project, tool, checks, index, states, onSave, onNavigate }) {
+export function CheckRunner({ project, tool, checks, index, states, alignments, onSave, onNavigate }) {
   const check = checks[index];
   const state = states[check.id] || EMPTY_STATE;
   const verseText = getVerseText(project, check.chapter, check.verse);
+  const gloss = useMemo(
+    () =>
+      alignments
+        ? glossQuote(getVerseAligns(alignments, check.chapter, check.verse), check.quote, check.occurrence)
+        : null,
+    [alignments, check.id],
+  );
   const [article, setArticle] = useState(null); // tW definition / tA explainer
   const [title, setTitle] = useState('');
   const [comment, setComment] = useState(state.comment);
@@ -109,12 +117,22 @@ export function CheckRunner({ project, tool, checks, index, states, onSave, onNa
               {check.quote}
               {check.occurrence > 1 ? ` (occurrence ${check.occurrence})` : ''}
             </div>
+            {gloss && (
+              <div class="gloss">
+                <span class="gloss-label">English</span> {gloss}
+              </div>
+            )}
           </div>
         ) : (
           check.quote && (
             <div class="check-quote">
               {check.quote}
               {check.occurrence > 1 ? <span class="muted"> (occurrence {check.occurrence})</span> : ''}
+              {gloss && (
+                <div class="gloss">
+                  <span class="gloss-label">English</span> {gloss}
+                </div>
+              )}
             </div>
           )
         )}
