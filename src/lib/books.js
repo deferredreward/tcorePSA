@@ -24,3 +24,8 @@ export function usfmFileNumber(code) {
   const n = i < 39 ? i + 1 : i + 2; // NT numbering skips 40
   return String(n).padStart(2, '0');
 }
+
+// First 39 books are OT; MAT (index 39) onward are NT
+export function isNewTestament(code) {
+  return ORDER.indexOf(code) >= 39;
+}

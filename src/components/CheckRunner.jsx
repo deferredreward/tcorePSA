@@ -6,7 +6,7 @@ import {
   removeSelection,
 } from '../lib/selectionEngine';
 import { getVerseText } from '../lib/verses';
-import { getVerseAligns, glossQuote } from '../lib/alignment';
+import { glossQuote } from '../lib/alignment';
 import { fetchTwArticle, fetchTaArticle } from '../lib/door43';
 import { groupTitle } from '../lib/titles';
 import { Markdown } from './Markdown';
@@ -67,7 +67,14 @@ export function CheckRunner({ project, tool, checks, index, states, pins, alignm
   const gloss = useMemo(
     () =>
       alignments
-        ? glossQuote(getVerseAligns(alignments, check.chapter, check.verse), check.quote, check.occurrence)
+        ? glossQuote({
+            sourceBook: alignments.sourceBook,
+            targetBook: alignments.targetBook,
+            chapter: check.chapter,
+            verse: check.verse,
+            quote: check.quote,
+            occurrence: check.occurrence,
+          })
         : null,
     [alignments, check.id],
   );
