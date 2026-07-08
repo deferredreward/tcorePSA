@@ -11,7 +11,7 @@ import {
   saveCheckStates,
 } from '../lib/store';
 import { importBurrito, seedStatesFromDecisions } from '../lib/tc4';
-import { syncProject, fetchProjectFromDcs, listMyRepos } from '../lib/sync';
+import { syncProject, fetchProjectFromDcs, listMyRepos, describeSyncResult } from '../lib/sync';
 
 export function Home({ onOpen, auth }) {
   const [projects, setProjects] = useState([]);
@@ -116,14 +116,7 @@ export function Home({ onOpen, auth }) {
       const result = await syncProject(projectId, auth, {
         promptRepoName: (dflt) => prompt('Door43 repository name for this project:', dflt),
       });
-      const msg = result.cancelled
-        ? ''
-        : !result.pushed && !result.pulled
-          ? '✓ Up to date'
-          : `✓ ${[result.pulled && `pulled ${result.pulled}`, result.pushed && `pushed ${result.pushed}`]
-              .filter(Boolean)
-              .join(', ')}`;
-      setSyncStatus((s) => ({ ...s, [projectId]: msg }));
+      setSyncStatus((s) => ({ ...s, [projectId]: describeSyncResult(result) }));
       await refresh();
     } catch (err) {
       setSyncStatus((s) => ({ ...s, [projectId]: `⚠ ${err.message || err}` }));

@@ -5,7 +5,7 @@ import { buildReportMarkdown, downloadText } from '../lib/report';
 import { exportBurrito } from '../lib/tc4';
 import { getActorId, getJournal } from '../lib/journal';
 import { getBurrito } from '../lib/store';
-import { syncProject } from '../lib/sync';
+import { syncProject, describeSyncResult } from '../lib/sync';
 import { isDone } from './CheckList';
 
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
@@ -37,19 +37,21 @@ function ToolReport({ tool, checks, states, pins }) {
         <div class="progress-fill" style={`width:${checks.length ? (100 * done) / checks.length : 0}%`} />
       </div>
       <table class="report-table">
-        {groups.map((g) => {
-          const gDone = g.checks.filter((c) => isDone(states[c.id])).length;
-          const gFlag = g.checks.filter((c) => states[c.id]?.reminder).length;
-          return (
-            <tr>
-              <td>{titles[g.id] || g.id}</td>
-              <td class="num">
-                {gDone}/{g.checks.length}
-              </td>
-              <td class="num">{gFlag ? `🚩${gFlag}` : ''}</td>
-            </tr>
-          );
-        })}
+        <tbody>
+          {groups.map((g) => {
+            const gDone = g.checks.filter((c) => isDone(states[c.id])).length;
+            const gFlag = g.checks.filter((c) => states[c.id]?.reminder).length;
+            return (
+              <tr>
+                <td>{titles[g.id] || g.id}</td>
+                <td class="num">
+                  {gDone}/{g.checks.length}
+                </td>
+                <td class="num">{gFlag ? `🚩${gFlag}` : ''}</td>
+              </tr>
+            );
+          })}
+        </tbody>
       </table>
       {attention.length > 0 && (
         <>
@@ -85,15 +87,7 @@ export function Report({ project, checks, states, skipped, pins, auth, onSynced 
       const result = await syncProject(project.id, auth, {
         promptRepoName: (dflt) => prompt('Door43 repository name for this project:', dflt),
       });
-      setSyncMsg(
-        result.cancelled
-          ? null
-          : !result.pushed && !result.pulled
-            ? '✓ Up to date'
-            : `✓ ${[result.pulled && `pulled ${result.pulled} decisions`, result.pushed && `pushed ${result.pushed} files`]
-                .filter(Boolean)
-                .join(', ')}`,
-      );
+      setSyncMsg(describeSyncResult(result) || null);
       if (!result.cancelled) await onSynced?.();
     } catch (err) {
       setSyncMsg(`⚠ ${err.message || err}`);

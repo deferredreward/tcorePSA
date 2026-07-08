@@ -51,15 +51,20 @@ export function mergeStates(local, remote) {
   return { merged, pulled };
 }
 
-// Same TSV fetch + partial-upload filter as App.openProject — sync runs it
-// itself because pushing requires the network anyway
-async function loadChecks(project, pins) {
+// Fetch a project's tN/tW checks and filter them to the uploaded verses.
+// Returns the kept lists plus how many were skipped (outside the upload).
+// Shared with App.loadProjectData so the check-loading logic lives in one place.
+export async function loadChecks(project, pins) {
   const [tnTsv, twlTsv] = await Promise.all([
     fetchTnTsv(project.bookCode, pins?.translationNotes),
     fetchTwlTsv(project.bookCode),
   ]);
   const filter = (list) => list.filter((c) => getVerseText(project, c.chapter, c.verse) != null);
-  return { tn: filter(parseTnChecks(tnTsv)), tw: filter(parseTwChecks(twlTsv)) };
+  const tnAll = parseTnChecks(tnTsv);
+  const twAll = parseTwChecks(twlTsv);
+  const tn = filter(tnAll);
+  const tw = filter(twAll);
+  return { tn, tw, skipped: { tn: tnAll.length - tn.length, tw: twAll.length - tw.length } };
 }
 
 // OAuth access tokens expire hourly — transparently refresh (and persist)
@@ -139,17 +144,19 @@ export async function syncProject(projectId, auth, { promptRepoName } = {}) {
     burrito = { metadata: remote.metadata, files: remote.files, pins: remote.pins, settings: remote.settings };
     // Adopt the remote source text (this app never edits USFM in place — a
     // re-upload makes a new project — so remote is the authoritative evolving
-    // source). Lets a device pick up a book expanded/updated elsewhere. Compare
-    // stripped-vs-stripped so the raw-upload-vs-stored-stripped difference
-    // doesn't churn every sync.
+    // source). Lets a device pick up a book expanded/updated elsewhere. Strip
+    // BOTH sides: importBurrito returns the remote file verbatim, which may
+    // carry alignment markup (externally-populated / tC3 repos); comparing and
+    // storing stripped keeps INVARIANT I-1 and stops every sync re-churning it.
     const remoteBook = remote.books.find((b) => b.book === book);
-    if (remoteBook?.usfmText && stripAlignmentMarkup(project.usfmText || '') !== remoteBook.usfmText) {
-      const parsed = parseUsfm(remoteBook.usfmText);
+    const remoteSource = remoteBook?.usfmText ? stripAlignmentMarkup(remoteBook.usfmText) : null;
+    if (remoteSource && stripAlignmentMarkup(project.usfmText || '') !== remoteSource) {
+      const parsed = parseUsfm(remoteSource);
       if (parsed.bookCode && Object.keys(parsed.chapters).length) {
         project = {
           ...project,
           chapters: parsed.chapters,
-          usfmText: remoteBook.usfmText,
+          usfmText: remoteSource,
           bookName: parsed.bookName || project.bookName,
         };
       }
@@ -157,26 +164,30 @@ export async function syncProject(projectId, auth, { promptRepoName } = {}) {
   }
 
   // ---- build local files and diff against the remote tree ----
-  const checks = await loadChecks(project, burrito?.pins);
+  const { tn, tw } = await loadChecks(project, burrito?.pins);
   const files = buildBurritoFiles({
     project,
     burrito,
-    checks,
+    checks: { tn, tw },
     states,
     journal: { actorId: await getActorId(), events: await getJournal(project.id) },
   });
   const remoteTree = remoteSha ? await dcs.getTree(owner, repo, remoteSha, auth.token) : {};
+  // hash only files that already exist remotely (new files skip straight to
+  // create); the SHA-1 digests are independent, so compute them in parallel
+  const entries = Object.entries(files);
+  const shas = await Promise.all(entries.map(([path, data]) => (remoteTree[path] ? gitBlobSha(data) : null)));
   const changes = [];
-  for (const [path, data] of Object.entries(files)) {
+  entries.forEach(([path, data], i) => {
     const remoteBlob = remoteTree[path];
-    if (remoteBlob && remoteBlob === (await gitBlobSha(data))) continue;
+    if (remoteBlob && remoteBlob === shas[i]) return; // unchanged
     changes.push({
       operation: remoteBlob ? 'update' : 'create',
       path,
       content: dcs.toBase64(data),
       ...(remoteBlob ? { sha: remoteBlob } : {}),
     });
-  }
+  });
 
   let newSha = remoteSha;
   if (changes.length) {
@@ -207,6 +218,17 @@ export async function syncProject(projectId, auth, { promptRepoName } = {}) {
   await saveProject(project);
 
   return { pulled, pushed: changes.length, repoUrl: `${dcs.DCS_HOST}/${project.dcs.owner}/${project.dcs.repo}` };
+}
+
+// Human-readable summary of a syncProject result, shared by the Home and
+// report screens so both report a sync the same way. '' when cancelled or
+// a no-op the UI shouldn't announce.
+export function describeSyncResult(result) {
+  if (result.cancelled) return '';
+  if (!result.pushed && !result.pulled) return '✓ Up to date';
+  return `✓ ${[result.pulled && `pulled ${result.pulled} decisions`, result.pushed && `pushed ${result.pushed} files`]
+    .filter(Boolean)
+    .join(', ')}`;
 }
 
 // The signed-in user's repos — funnels through resolveAuth so an expired

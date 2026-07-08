@@ -209,14 +209,20 @@ export async function getBranchSha(owner, repo, branch, token) {
 // bytes against the remote without downloading file contents.
 export async function getTree(owner, repo, ref, token) {
   const shaByPath = {};
+  let seen = 0;
   for (let page = 1; ; page++) {
     const t = await api(
       `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=true&per_page=1000&page=${page}`,
       { token },
     );
-    for (const e of t?.tree || []) if (e.type === 'blob') shaByPath[e.path] = e.sha;
-    const seen = page * 1000;
-    if (!t?.tree?.length || seen >= (t.total_count || 0)) break;
+    const entries = t?.tree || [];
+    for (const e of entries) if (e.type === 'blob') shaByPath[e.path] = e.sha;
+    // total_count counts every entry (files + dirs); per_page can be capped
+    // server-side (DCS honours smaller pages), so advance by the entries we
+    // actually received rather than an assumed page size — else a large tree
+    // stops early and its files get pushed as create → 422 "already exists".
+    seen += entries.length;
+    if (!entries.length || seen >= (t.total_count || 0)) break;
   }
   return shaByPath;
 }
@@ -225,7 +231,9 @@ export async function getTree(owner, repo, ref, token) {
 // which already tolerates the archive's single wrapper directory.
 export async function downloadArchive(owner, repo, ref, token) {
   const res = await fetch(`${API}/repos/${owner}/${repo}/archive/${encodeURIComponent(ref)}.zip`, {
-    headers: token ? { Authorization: `token ${token}` } : {},
+    // Bearer (like api()) so OAuth access tokens work, not just PAT sha1s —
+    // otherwise an OAuth user can't download a private repo's archive.
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new Error(`DCS archive download failed (HTTP ${res.status})`);
   return new Uint8Array(await res.arrayBuffer());

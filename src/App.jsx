@@ -5,11 +5,11 @@ import { GroupList } from './components/GroupList';
 import { CheckRunner } from './components/CheckRunner';
 import { Report } from './components/Report';
 import { Door43Account } from './components/Door43Account';
-import { fetchTnTsv, fetchTwlTsv, fetchUltUsfm, fetchOlUsfm } from './lib/door43';
+import { fetchUltUsfm, fetchOlUsfm } from './lib/door43';
 import { completeOAuth } from './lib/dcs';
-import { parseTnChecks, parseTwChecks, groupChecks } from './lib/checks';
+import { loadChecks } from './lib/sync';
+import { groupChecks } from './lib/checks';
 import { parseBook } from './lib/alignment';
-import { getVerseText } from './lib/verses';
 import { getProject, getCheckStates, saveCheckState, getBurrito, getDcsAuth, saveDcsAuth } from './lib/store';
 import { appendDecisionEvent } from './lib/journal';
 
@@ -73,18 +73,11 @@ export function App() {
         setAlignments({ sourceBook: parseBook(olUsfm), targetBook: parseBook(ultUsfm) }),
       )
       .catch(() => {});
-    const [tnTsv, twlTsv] = await Promise.all([
-      fetchTnTsv(p.bookCode, projectPins?.translationNotes),
-      fetchTwlTsv(p.bookCode),
-    ]);
-    // partial-book support: only keep checks whose verse exists in the upload
-    const filter = (list) => list.filter((c) => getVerseText(p, c.chapter, c.verse) != null);
-    const tn = parseTnChecks(tnTsv);
-    const tw = parseTwChecks(twlTsv);
-    const tnKept = filter(tn);
-    const twKept = filter(tw);
-    setChecks({ tn: tnKept, tw: twKept });
-    setSkipped({ tn: tn.length - tnKept.length, tw: tw.length - twKept.length });
+    // partial-book support (fetch + filter to uploaded verses) is shared with
+    // sync so both derive the same check list
+    const { tn, tw, skipped } = await loadChecks(p, projectPins);
+    setChecks({ tn, tw });
+    setSkipped(skipped);
   }
 
   async function openProject(id) {
