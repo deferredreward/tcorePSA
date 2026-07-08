@@ -15,7 +15,8 @@
 
 import { strFromU8 } from 'fflate';
 import * as dcs from './dcs';
-import { importBurrito, buildBurritoFiles, seedStatesFromDecisions } from './tc4';
+import { importBurrito, buildBurritoFiles, seedStatesFromDecisions, stripAlignmentMarkup } from './tc4';
+import { parseUsfm } from './usfmParse';
 import { fetchTnTsv, fetchTwlTsv } from './door43';
 import { parseTnChecks, parseTwChecks } from './checks';
 import { getVerseText } from './verses';
@@ -136,6 +137,23 @@ export async function syncProject(projectId, auth, { promptRepoName } = {}) {
     // remote files become the round-trip base (sibling books, other actors'
     // journals, everything unmodeled) — local decisions re-merge on top below
     burrito = { metadata: remote.metadata, files: remote.files, pins: remote.pins, settings: remote.settings };
+    // Adopt the remote source text (this app never edits USFM in place — a
+    // re-upload makes a new project — so remote is the authoritative evolving
+    // source). Lets a device pick up a book expanded/updated elsewhere. Compare
+    // stripped-vs-stripped so the raw-upload-vs-stored-stripped difference
+    // doesn't churn every sync.
+    const remoteBook = remote.books.find((b) => b.book === book);
+    if (remoteBook?.usfmText && stripAlignmentMarkup(project.usfmText || '') !== remoteBook.usfmText) {
+      const parsed = parseUsfm(remoteBook.usfmText);
+      if (parsed.bookCode && Object.keys(parsed.chapters).length) {
+        project = {
+          ...project,
+          chapters: parsed.chapters,
+          usfmText: remoteBook.usfmText,
+          bookName: parsed.bookName || project.bookName,
+        };
+      }
+    }
   }
 
   // ---- build local files and diff against the remote tree ----

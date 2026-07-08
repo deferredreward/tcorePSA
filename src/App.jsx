@@ -33,9 +33,12 @@ export function App() {
   useEffect(() => {
     getDcsAuth().then((a) => a && setAuth(a));
     completeOAuth()
-      .then((a) => {
+      .then(async (a) => {
         if (a) {
-          saveDcsAuth(a);
+          // persist before exposing the account — DCS ops resolve auth from the
+          // store, so setAuth must not outrun the write (else a sync fired right
+          // after the redirect races it and uses the previous/absent token)
+          await saveDcsAuth(a);
           setAuth(a);
         }
       })

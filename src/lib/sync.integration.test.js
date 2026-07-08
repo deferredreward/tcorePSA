@@ -186,6 +186,27 @@ describe('syncProject end-to-end (fake DCS)', () => {
     expect(remote.commits).toBe(1);
   });
 
+  it('pull adopts the remote source text so a device picks up an expanded book', async () => {
+    // device A seeds the remote with a two-verse book
+    const projectA = {
+      ...makeProject('TIT-a'),
+      chapters: { 1: { 1: 'Paul, a servant of God…', 2: 'To Titus, my true son…' } },
+      usfmText: '\\id TIT\n\\c 1\n\\v 1 Paul, a servant of God…\n\\v 2 To Titus, my true son…\n',
+    };
+    await saveProject(projectA);
+    await syncProject('TIT-a', AUTH);
+
+    // device B imported earlier, before verse 2 existed
+    db = new Map();
+    await saveProject({ ...makeProject('TIT-b'), dcs: { owner: 'tester', repo: 'tit_checks', branch: 'master' } });
+
+    await syncProject('TIT-b', AUTH);
+
+    const stored = await db.get('project:TIT-b');
+    expect(Object.keys(stored.chapters['1'])).toEqual(['1', '2']); // picked up verse 2
+    expect(stored.usfmText).toContain('To Titus');
+  });
+
   it('expired OAuth token is refreshed from the store, not the stale in-memory copy', async () => {
     // The store is the source of truth; a prior op already rotated to RT-stored.
     const stored = {
