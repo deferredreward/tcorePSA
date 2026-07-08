@@ -289,7 +289,7 @@ export function Home({ onOpen, auth }) {
               </div>
             )}
           </div>
-          {auth && (
+          {auth && p.format !== 'tc3' && (
             <button
               class="secondary"
               style="padding:6px 10px"

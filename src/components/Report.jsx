@@ -138,7 +138,7 @@ export function Report({ project, checks, states, skipped, pins, auth, onSynced 
           🌯 Export tC4 project (Scripture Burrito .zip)
         </button>
       )}
-      {auth && (
+      {auth && project.format !== 'tc3' && (
         <button
           class="secondary"
           style="width:100%;margin-bottom:12px"
