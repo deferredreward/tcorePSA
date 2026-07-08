@@ -16,7 +16,10 @@ book alongside the ULT (`fetchOlUsfm`), and `glossQuote` is a thin wrapper.
 
 Verified: the Obadiah 1:10 case that motivated the rework (`תְּכַסְּךָ בוּשָׁה`, where quote order ≠
 verse order) now returns **"shame will cover you"** instead of nothing; OT (Ruth/UHB) and NT
-(Titus/UGNT) both glossed correctly in-app.
+(Titus/UGNT) both glossed correctly in-app. Full sweep over all 490 Ruth+Titus tN quotes:
+coverage went from **350/490 (71%) → 490/490 (100%)** — every one of the 140 quotes the old matcher
+returned nothing for now resolves, and sampled recoveries (discontiguous, long, word-order-flipped)
+are correct.
 
 ### Why we replaced the hand-rolled version (measured evidence)
 
