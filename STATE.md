@@ -73,15 +73,20 @@ online, pick up on another. Design decisions:
   round-trip base → `buildBurritoFiles` (extracted from `exportBurrito`) re-merges local states on
   top → diff by locally-computed **git blob sha** (`crypto.subtle` SHA-1) → commit only changed
   files. Unlike tC3 (errors on non-fast-forward), concurrent edits on two devices converge.
-  Remote-only files are never deleted.
+  Remote-only files are never deleted. The pull also **adopts the remote source USFM** (this app
+  never edits USFM in place, so remote is authoritative) so a book expanded elsewhere shows up here;
+  `App.loadProjectData` re-derives the checklist after a sync so counts aren't stale.
 - **Auth is optional and dual-path.** The app works fully signed-out (all resource reads stay
   unauthenticated). Sign-in: (a) OAuth PKCE public client — bible-editor's DCS OAuth design minus
   the backend; the token endpoint's CORS preflight only allows GET, so the code exchange is a
   form-encoded *simple request* (no preflight). Needs a one-time OAuth app registration on DCS
   (public client, redirect = app URL) exposed as `VITE_DCS_CLIENT_ID`; access tokens auto-refresh
   (`ensureFreshAuth`). (b) Zero-setup fallback: username+password → per-app access token
-  (`tcore-checks-pwa`, delete-and-recreate since Gitea only reveals the secret at creation), or an
-  existing PAT pasted as the password (works with 2FA). Auth lives in IndexedDB (`dcs:auth`).
+  (name qualified per device — `tcore-checks-pwa (<actorId>)` — since Gitea only reveals the secret
+  at creation and can't re-read it; per-device naming means a second device's sign-in doesn't
+  revoke the first's token), or an existing PAT pasted as the password (works with 2FA). Auth
+  lives in IndexedDB (`dcs:auth`); the store is the source of truth — every DCS op funnels through
+  `resolveAuth` (store-sourced + refresh) so a rotated OAuth token is never used stale.
 - **Repo naming**: first sync prompts, default `{book}_checks`, created under the signed-in user.
   Link stored on the project (`project.dcs = {owner, repo, branch, lastSha, lastSyncAt}`);
   online imports (`fetchProjectFromDcs`) stamp the link on every book project so they sync back
@@ -96,10 +101,16 @@ online, pick up on another. Design decisions:
   "Sign in with Door43"); the password/token form is the fallback (behind a disclosure when
   OAuth is available, inline otherwise). `App.jsx` owns `auth` and runs `completeOAuth()` on load.
 
+This section was hardened over a 5-round Codex PR review (PR #8): occurrence-collision guard in
+`seedStatesFromDecisions`, `resolveAuth` (store-sourced, kills OAuth refresh-token staleness),
+per-device PAT names, remote-source adoption on pull, sequenced OAuth-vs-stored auth load, and
+`Report` taking `auth` as a prop so sign-out takes effect live. Regression tests cover each.
+
 Known gaps: no delete propagation (removing a project locally never touches DCS); race between
 archive download and commit is unguarded (a concurrent push mid-sync could be overwritten for
 the current book's files — acceptable while one translator owns a book, flagged for later);
-`listMyRepos` shows all repos, not just burritos.
+`listMyRepos` shows all repos, not just burritos; pre-existing `<tr>`-without-`<tbody>` warning in
+`Report.jsx` (cosmetic, predates sync work).
 
 ## English gloss of quotes — `src/lib/alignment.js`
 
