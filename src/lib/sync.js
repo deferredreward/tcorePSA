@@ -107,6 +107,14 @@ export async function syncProject(projectId, auth, { promptRepoName } = {}) {
   if (!auth?.token) throw new Error('Sign in to your Door43 account first');
   let project = await getProject(projectId);
   if (!project) throw new Error('Project not found');
+  // tC3 imports round-trip through their own (separate) write pipeline. Until
+  // that lands, guard the burrito sync from ever pushing a burrito into a tC3
+  // repo — importBurrito would fail on the pull anyway, but fail loud + early.
+  if (project.format === 'tc3') {
+    throw new Error(
+      'This is a translationCore 3 project — syncing it back to Door43 (in tC3 format) is coming soon. Import is read-only for now.',
+    );
+  }
   const book = project.bookCode.toUpperCase();
 
   // resolve the repo link (first sync: name + create under the signed-in user)

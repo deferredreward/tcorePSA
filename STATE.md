@@ -51,6 +51,52 @@ Spec feedback owed to the tC4 team:
 3. §5.2's quoteString-mismatch guidance doesn't say what a writer does with its own new
    decision (see re-anchor decision above).
 
+## tC3 (translationCore 3) backward-compat import — `src/lib/tc3.js`
+
+**Status: working and verified end-to-end against a real repo
+(`git.door43.org/deferredreward/en_rnb_oba_book`, `tc_version 8`). Read-only import; 8 vitest
+cases in `src/lib/tc3.test.js` (in `npm test`). Live archive import + in-app render confirmed:
+the repo's two done tN checks (OBA 1:1 `figs-abstractnouns` → "go whup"; 1:7 `figs-aside` →
+"And you Edom folks ain't got the sense to see it comin'") seed to `tn-1:1-jd1r` / `tn-1:7-rc1i`
+and show as "2 of 152" completed in the report (Abstract Nouns 1/10, Aside 1/1).**
+
+Two isolated write pipelines by design (tC3 and burrito never share a write path). This file is
+the **tC3 read** side only; the tC3 write-back and the one-way tC3→burrito upgrade are spun off
+as separate tasks (see gaps).
+
+Design decisions:
+
+- **tC3 checkData is the ancestor of tc4's decision records** — same `contextId` shape — so
+  imported records are emitted tc4-shaped and the existing `seedStatesFromDecisions` (tc4.js)
+  keys them unchanged (`<tool>-<ref>-<checkId>`). No new seeding path.
+- **Decisions are split across per-category files** in tC3
+  (`.apps/translationCore/checkData/{selections,comments,reminders,invalidated}/<book>/<ch>/<v>/<ISO>.json`);
+  newest-per-category wins, then categories merge into one record per check. tC3's `text`
+  (→`comments`) and `enabled` (→`reminders`) field names are bridged in tc3.js.
+- **Resource pins come from the manifest** (`tc_<gl>_check_version_<tool>`, e.g.
+  `"v88_unfoldingWord"` → `v88`) so checks fetch the exact release the project was checked
+  against and checkIds match 1:1. This is the tC3 analog of BURRITO-SPEC §5.3 — and unlike the
+  burrito path it *does* carry a tW-list version.
+- **`format: 'tc3'` on the project** routes the sync button to the tC3 pipeline; until that
+  pipeline lands, `syncProject` throws a clear "coming soon" guard so a burrito is never pushed
+  into a tC3 repo. Pins ride on `project.pins` (App.loadProjectData reads it), not a burrito
+  import context — so nothing tC3 touches the tc4 store.
+- **Detection** (`detectProjectFormat`): a scripture-burrito `metadata.json` ⇒ burrito; else a
+  tc-initialized `manifest.json` ⇒ tc3. Tolerates the DCS archive's wrapper directory.
+
+Known gaps / follow-ups (spun off as suggested tasks):
+
+- **tC3 sync-back write pipeline** — write decisions back to the *same* repo in tC3 format
+  (append timestamped checkData files), fully separate from burrito sync.
+- **tC3→Burrito upgrade** — one-way convert to burrito, either in place or to a new personal
+  repo (`dcs.createRepo` + `commitFiles`); no downgrade. Would be the first real exercise of the
+  authenticated DCS write path (still un-live-verified — see the DCS section).
+- **Older tC3 projects without `checkId`** key only by group+quote+occurrence; those won't
+  attach until re-anchored against the current resource — that fuzzy matcher is not built (the
+  modern checkId path is what's verified).
+- **tW/tQ:** tW imports, but its checks fetch en_twl at master (existing gap below), so a tW
+  checkId may not match a pinned list; translationQuestions is not modeled and is skipped.
+
 ## Door43 (DCS) sync — `src/lib/dcs.js`, `src/lib/sync.js`
 
 **Status: implemented and tested against a fake DCS (4-scenario integration test in
