@@ -87,6 +87,8 @@ check('import: span verse keys stay strings in seeded ids',
   Object.keys(seedStatesFromDecisions({
     tn: [{ contextId: { checkId: 'zz99', reference: { bookId: 'jon', chapter: 2, verse: '9-10' } }, selections: false, modifiedTimestamp: 't' }],
   }))[0] === 'tn-2:9-10-zz99');
+check('import: invalidated records seed as needs-re-review, not done',
+  seeded['tn-1:4-gr8c']?.invalidated === true && seeded['tn-1:1-swi9']?.invalidated === false);
 
 // miniature check lists mirroring the fixture's decision records (what the
 // PWA derives from the pinned TSVs at load time)
@@ -204,13 +206,27 @@ const burrito = { metadata: imp.metadata, files: imp.files, pins: imp.pins, sett
   });
   check('spans: verse 9 does NOT match the 9-10 span record; new record appended instead',
     notMerged.decisions.length === 2 && notMerged.decisions[0].selections === false);
-  check('quoteString guard: key match with a different quote is left alone',
+  // resource drifted under a touched decision: the user's work must not be
+  // lost, and duplicating the identity key is not allowed — the record is
+  // re-anchored to the current resource
+  const drifted = mergeDecisions({
+    imported: JSON.parse(JSON.stringify(imported)),
+    checks: [{ ...spanCheck, quote: 'DIFFERENT' }],
+    states: { 'tn-2:9-10-sp01': { selections: [{ text: 'y', occurrence: 1, occurrences: 1 }], comment: '', reminder: false, nothingToSelect: false, modifiedAt: '2026-07-07T11:00:00.000Z' } },
+    tool: 'tn', book: 'JON',
+  });
+  check('quoteString drift + touched: record re-anchored to current resource, work kept',
+    drifted.decisions.length === 1 &&
+    drifted.decisions[0].contextId.quoteString === 'DIFFERENT' &&
+    drifted.decisions[0].selections[0]?.text === 'y' &&
+    drifted.decisions[0].modifiedTimestamp === '2026-07-07T11:00:00.000Z');
+  check('quoteString drift + untouched: record round-trips verbatim',
     mergeDecisions({
       imported: JSON.parse(JSON.stringify(imported)),
       checks: [{ ...spanCheck, quote: 'DIFFERENT' }],
-      states: { 'tn-2:9-10-sp01': { selections: [{ text: 'y', occurrence: 1, occurrences: 1 }], comment: '', reminder: false, nothingToSelect: false, modifiedAt: '2026-07-07T11:00:00.000Z' } },
+      states: { 'tn-2:9-10-sp01': { selections: [], comment: '', reminder: false, nothingToSelect: false, modifiedAt: '2026-07-01T00:00:00.000Z' } },
       tool: 'tn', book: 'JON',
-    }).decisions[0].selections === false);
+    }).decisions[0].contextId.quoteString === 'x');
 }
 
 // ---------- 6. journal (BURRITO-SPEC §8 design draft) ----------

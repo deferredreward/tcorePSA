@@ -4,7 +4,7 @@ import { groupTitle } from './titles';
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
 
 function isDone(state) {
-  return !!state && (state.nothingToSelect || (state.selections || []).length > 0);
+  return !!state && !state.invalidated && (state.nothingToSelect || (state.selections || []).length > 0);
 }
 
 // Markdown report covering only checks that are done, flagged, or commented

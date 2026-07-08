@@ -1,5 +1,6 @@
 function isDone(state) {
-  return !!state && (state.nothingToSelect || (state.selections || []).length > 0);
+  // invalidated = the text changed under this decision (tC4 import) — needs re-review
+  return !!state && !state.invalidated && (state.nothingToSelect || (state.selections || []).length > 0);
 }
 
 export function checkProgress(checks, states) {

@@ -159,6 +159,8 @@ export function seedStatesFromDecisions(decisionsByTool) {
         comment: typeof d.comments === 'string' ? d.comments : '',
         reminder: !!d.reminders,
         nothingToSelect: !!d.nothingToSelect,
+        // needs re-review (tC3 invalidation) — the UI must not count it as done
+        invalidated: !!(d.invalidated || d.status === 'invalid'),
         modifiedAt: d.modifiedTimestamp,
       };
     }
@@ -211,8 +213,11 @@ function decisionFieldsFromState(state) {
 }
 
 // Merge PWA states into the imported decision file for one tool+book.
-// Untouched and unmatched imported records round-trip verbatim; a key match
-// whose quoteString differs is treated as unmatched (resource changed).
+// Untouched and unmatched imported records round-trip verbatim. A key match
+// whose quoteString differs means the resource changed under the decision:
+// if the user re-decided it here, the record is re-anchored to the current
+// resource (appending instead would duplicate the identity key; skipping
+// would silently lose the user's work).
 export function mergeDecisions({ imported, checks, states, tool, book, resourcePin }) {
   const out = imported
     ? JSON.parse(JSON.stringify(imported))
@@ -234,8 +239,11 @@ export function mergeDecisions({ imported, checks, states, tool, book, resourceP
     const record = byKey.get(keyOfCheck(check, book));
     if (record) {
       if (!state.modifiedAt || state.modifiedAt === record.modifiedTimestamp) continue; // untouched
-      if (normalizeQuote(record.contextId.quoteString) !== normalizeQuote(check.quote)) continue; // resource drift
-      Object.assign(record, decisionFieldsFromState(state));
+      if (normalizeQuote(record.contextId.quoteString) !== normalizeQuote(check.quote)) {
+        out.decisions[out.decisions.indexOf(record)] = recordFromCheck(check, state, tool, book);
+      } else {
+        Object.assign(record, decisionFieldsFromState(state));
+      }
     } else if (
       state.selections?.length || state.comment || state.reminder || state.nothingToSelect
     ) {

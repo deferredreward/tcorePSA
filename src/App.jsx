@@ -62,7 +62,8 @@ export function App() {
     if (!prev && !hasContent) return;
     if (prev && JSON.stringify({ ...prev, modifiedAt: 0 }) === JSON.stringify({ ...state, modifiedAt: 0 }))
       return;
-    const stamped = { ...state, modifiedAt: new Date().toISOString() };
+    // a fresh decision on the current text resolves any imported re-review flag
+    const stamped = { ...state, invalidated: false, modifiedAt: new Date().toISOString() };
     const next = await saveCheckState(project.id, checkId, stamped);
     setStates({ ...next });
     // journal every decision (BURRITO-SPEC §8 draft); never block the UI on it
