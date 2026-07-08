@@ -18,6 +18,7 @@ export function parseTnChecks(tsvText) {
     const support = row.SupportReference || '';
     checks.push({
       id: `tn-${row.Reference}-${row.ID}`,
+      checkId: row.ID,
       tool: 'tn',
       chapter: ref.chapter,
       verse: ref.verse,
@@ -43,6 +44,7 @@ export function parseTwChecks(twlText) {
     const category = row.TWLink.split('/').slice(-2, -1)[0]; // kt | names | other
     checks.push({
       id: `tw-${row.Reference}-${row.ID}`,
+      checkId: row.ID,
       tool: 'tw',
       chapter: ref.chapter,
       verse: ref.verse,

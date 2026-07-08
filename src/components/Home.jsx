@@ -2,7 +2,15 @@ import { useEffect, useState } from 'preact/hooks';
 import { parseUsfm } from '../lib/usfmParse';
 import { fetchSampleUsfm } from '../lib/door43';
 import { usfmFileNumber, BOOKS } from '../lib/books';
-import { listProjects, getProject, saveProject, deleteProject } from '../lib/store';
+import {
+  listProjects,
+  getProject,
+  saveProject,
+  deleteProject,
+  saveBurrito,
+  saveCheckStates,
+} from '../lib/store';
+import { importBurrito, seedStatesFromDecisions } from '../lib/tc4';
 
 export function Home({ onOpen }) {
   const [projects, setProjects] = useState([]);
@@ -27,6 +35,7 @@ export function Home({ onOpen }) {
       id: `${parsed.bookCode}-${Date.now()}`,
       name: `${parsed.bookName} (${sourceName})`,
       ...parsed,
+      usfmText,
       createdAt: new Date().toISOString(),
     };
     await saveProject(project);
@@ -34,12 +43,45 @@ export function Home({ onOpen }) {
     return project;
   }
 
+  // A tC4 Scripture Burrito project zip: one PWA project per book, check
+  // states seeded from the checking/ decision sidecars
+  async function addBurrito(file) {
+    const imported = importBurrito(new Uint8Array(await file.arrayBuffer()));
+    const importId = `imp-${Date.now()}`;
+    await saveBurrito(importId, {
+      metadata: imported.metadata,
+      files: imported.files,
+      pins: imported.pins,
+      settings: imported.settings,
+    });
+    const projectName =
+      imported.metadata?.identification?.name?.en ||
+      imported.metadata?.identification?.abbreviation?.en ||
+      file.name;
+    for (const { book, usfmText } of imported.books) {
+      const parsed = parseUsfm(usfmText);
+      const project = {
+        id: `${book}-${Date.now()}`,
+        name: `${parsed.bookName || book} (${projectName})`,
+        ...parsed,
+        usfmText,
+        createdAt: new Date().toISOString(),
+        tc4: { importId, book },
+      };
+      await saveProject(project);
+      const seeded = seedStatesFromDecisions(imported.decisions[book] || {});
+      if (Object.keys(seeded).length) await saveCheckStates(project.id, seeded);
+    }
+    await refresh();
+  }
+
   async function onFile(e) {
     setError(null);
     setBusy(true);
     try {
       for (const file of e.target.files) {
-        await addProject(await file.text(), file.name);
+        if (/\.zip$/i.test(file.name)) await addBurrito(file);
+        else await addProject(await file.text(), file.name);
       }
     } catch (err) {
       setError(String(err.message || err));
@@ -76,14 +118,15 @@ export function Home({ onOpen }) {
         <h2>Add a translation</h2>
         <p class="muted">
           Upload a USFM file of your translation — a whole book or just the portion you've
-          translated — or try a sample (Titus, unfoldingWord ULT).
+          translated — or a translationCore 4 project (Scripture Burrito .zip), or try a sample
+          (Titus, unfoldingWord ULT).
         </p>
         <div class="row">
           <label class="primary">
-            Upload USFM
+            Upload USFM / tC4 zip
             <input
               type="file"
-              accept=".usfm,.sfm,.txt,.usf"
+              accept=".usfm,.sfm,.txt,.usf,.zip"
               multiple
               style="display:none"
               onChange={onFile}

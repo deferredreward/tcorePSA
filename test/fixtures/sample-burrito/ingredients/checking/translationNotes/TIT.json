@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "tool": "translationNotes",
+  "book": "TIT",
+  "resource": {
+    "repoPath": "git.door43.org/unfoldingWord/en_tn",
+    "version": "v86"
+  },
+  "decisions": [
+    {
+      "contextId": {
+        "checkId": "swi9",
+        "occurrenceNote": "Faith is an abstract noun. If your language does not use abstract nouns, you could express the idea differently.",
+        "reference": { "bookId": "tit", "chapter": 1, "verse": 1 },
+        "tool": "translationNotes",
+        "groupId": "figs-abstractnouns",
+        "quote": [
+          { "word": "κατὰ", "occurrence": 1 },
+          { "word": "πίστιν", "occurrence": 1 }
+        ],
+        "quoteString": "κατὰ πίστιν",
+        "glQuote": "according to the faith",
+        "occurrence": 1
+      },
+      "category": "translate",
+      "selections": [
+        { "text": "fe", "occurrence": 1, "occurrences": 1 }
+      ],
+      "comments": "Verificar si «fe» comunica bien el sustantivo abstracto en este contexto.",
+      "reminders": false,
+      "nothingToSelect": false,
+      "verseEdits": false,
+      "invalidated": false,
+      "modifiedTimestamp": "2026-07-02T15:02:11.000Z"
+    },
+    {
+      "contextId": {
+        "checkId": "gr8c",
+        "occurrenceNote": "Grace and peace was a customary greeting.",
+        "reference": { "bookId": "tit", "chapter": 1, "verse": 4 },
+        "tool": "translationNotes",
+        "groupId": "translate-blessing",
+        "quote": [
+          { "word": "χάρις", "occurrence": 1 },
+          { "word": "καὶ", "occurrence": 1 },
+          { "word": "εἰρήνη", "occurrence": 1 }
+        ],
+        "quoteString": "χάρις καὶ εἰρήνη",
+        "glQuote": "Grace and peace",
+        "occurrence": 1
+      },
+      "category": "translate",
+      "selections": [
+        { "text": "Gracia", "occurrence": 1, "occurrences": 1 },
+        { "text": "paz", "occurrence": 1, "occurrences": 1 }
+      ],
+      "comments": false,
+      "reminders": false,
+      "nothingToSelect": false,
+      "verseEdits": true,
+      "invalidated": true,
+      "modifiedTimestamp": "2026-07-02T15:40:56.000Z"
+    }
+  ],
+  "summary": {
+    "note": "derived cache, regenerable — decided counts by category",
+    "decided": { "translate": 2 }
+  }
+}

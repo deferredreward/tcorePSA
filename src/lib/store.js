@@ -22,6 +22,17 @@ export async function deleteProject(id) {
   await set('projects', ids.filter((p) => p !== id));
   await del(`project:${id}`);
   await del(`states:${id}`);
+  await del(`journal:${id}`);
+}
+
+// Imported tC4 burrito context (metadata + verbatim files + pins), shared by
+// the sibling projects of one multi-book import
+export function getBurrito(importId) {
+  return get(`burrito:${importId}`);
+}
+
+export function saveBurrito(importId, data) {
+  return set(`burrito:${importId}`, data);
 }
 
 // Check states: one record per project holding {checkId: state}
@@ -35,4 +46,8 @@ export async function saveCheckState(projectId, checkId, state) {
   states[checkId] = state;
   await set(`states:${projectId}`, states);
   return states;
+}
+
+export function saveCheckStates(projectId, states) {
+  return set(`states:${projectId}`, states);
 }

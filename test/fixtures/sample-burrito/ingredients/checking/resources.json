@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "note": "Stage-1 resource pinning (path-authoritative). Mirrors metadata.json relationships, which becomes the single copy after pankosmia-web preserves unknown metadata fields (PR-1).",
+  "gatewayLanguage": {
+    "languageId": "en",
+    "owner": "unfoldingWord"
+  },
+  "resources": {
+    "originalLanguage": {
+      "nt": { "repoPath": "git.door43.org/unfoldingWord/grc_ugnt", "version": "v0.34", "flavor": "scripture/textTranslation" },
+      "ot": { "repoPath": "git.door43.org/unfoldingWord/hbo_uhb", "version": "v2.1.30", "flavor": "scripture/textTranslation" }
+    },
+    "translationWords": {
+      "repoPath": "git.door43.org/unfoldingWord/en_tw", "version": "v87", "flavor": "parascriptural/x-bcvarticles"
+    },
+    "translationNotes": {
+      "repoPath": "git.door43.org/unfoldingWord/en_tn", "version": "v86", "flavor": "parascriptural/x-bcvnotes"
+    },
+    "translationAcademy": {
+      "repoPath": "git.door43.org/unfoldingWord/en_ta", "version": "v86", "flavor": "peripheral/x-peripheralArticles"
+    },
+    "lexicon": {
+      "nt": { "repoPath": "git.door43.org/unfoldingWord/en_ugl", "version": "v2", "flavor": "peripheral/x-lexicon" },
+      "ot": { "repoPath": "git.door43.org/unfoldingWord/en_uhl", "version": "v1", "flavor": "peripheral/x-lexicon" }
+    }
+  }
+}

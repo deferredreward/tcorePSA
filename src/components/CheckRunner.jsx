@@ -59,7 +59,7 @@ function TappableVerse({ verseText, selections, disabled, onChange }) {
   );
 }
 
-export function CheckRunner({ project, tool, checks, index, states, onSave, onNavigate }) {
+export function CheckRunner({ project, tool, checks, index, states, pins, onSave, onNavigate }) {
   const check = checks[index];
   const state = states[check.id] || EMPTY_STATE;
   const verseText = getVerseText(project, check.chapter, check.verse);
@@ -77,9 +77,9 @@ export function CheckRunner({ project, tool, checks, index, states, onSave, onNa
     groupTitle(tool, check.groupId).then((t) => live && setTitle(t));
     const load =
       tool === 'tw'
-        ? fetchTwArticle(check.link)
+        ? fetchTwArticle(check.link, pins?.translationWords)
         : check.groupId !== 'other'
-          ? fetchTaArticle(check.groupId)
+          ? fetchTaArticle(check.groupId, pins?.translationAcademy)
           : Promise.resolve(null);
     load.then((a) => live && setArticle(a)).catch((e) => live && setArticle(`_Could not load article: ${e.message}_`));
     return () => {
