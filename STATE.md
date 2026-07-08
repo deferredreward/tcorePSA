@@ -106,11 +106,19 @@ This section was hardened over a 5-round Codex PR review (PR #8): occurrence-col
 per-device PAT names, remote-source adoption on pull, sequenced OAuth-vs-stored auth load, and
 `Report` taking `auth` as a prop so sign-out takes effect live. Regression tests cover each.
 
-Known gaps: no delete propagation (removing a project locally never touches DCS); race between
-archive download and commit is unguarded (a concurrent push mid-sync could be overwritten for
-the current book's files — acceptable while one translator owns a book, flagged for later);
-`listMyRepos` shows all repos, not just burritos; pre-existing `<tr>`-without-`<tbody>` warning in
-`Report.jsx` (cosmetic, predates sync work).
+Known gaps:
+- **First-sync repo-name collision.** The default repo name is `{book}_checks`, deterministic per
+  book. If a repo of that name already exists under the user, `syncProject` silently adopts it —
+  pulling and merging its decisions into this project. Two independent same-book projects (e.g. two
+  Ruth drafts) both default to `rut_checks` and would cross-contaminate if the prompt's default is
+  accepted. The rename prompt is the only guard. **Needs a confirm-before-reuse UX** ("`rut_checks`
+  already exists — sync into it, or pick a new name?") on first link when the defaulted/entered repo
+  already exists and is non-empty; deliberately left for a product decision rather than a silent code
+  change. (`src/lib/sync.js` `syncProject`, first-sync branch.)
+- No delete propagation (removing a project locally never touches DCS).
+- Race between archive download and commit is unguarded (a concurrent push mid-sync could be
+  overwritten for the current book's files — acceptable while one translator owns a book).
+- `listMyRepos` shows all repos, not just burritos.
 
 ## English gloss of quotes — `src/lib/alignment.js`
 
