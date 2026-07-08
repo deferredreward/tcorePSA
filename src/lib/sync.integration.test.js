@@ -14,7 +14,7 @@ vi.mock('idb-keyval', () => ({
 }));
 
 // ---- fake DCS: one remote repo as a {path: Uint8Array} map ----
-const remote = { exists: false, files: null, commits: 0 };
+const remote = { exists: false, files: null, commits: 0, refreshes: 0, lastListToken: null };
 const headSha = () => (remote.files ? `commit-${remote.commits}` : null);
 
 vi.mock('./dcs', async (importOriginal) => {
@@ -46,6 +46,17 @@ vi.mock('./dcs', async (importOriginal) => {
       remote.commits++;
       return { commit: { sha: headSha() } };
     },
+    // token rotation: each refresh mints a new access/refresh token pair
+    refreshOAuth: async (a) => ({
+      ...a,
+      token: `access-${++remote.refreshes}`,
+      refreshToken: `RT-${remote.refreshes}`,
+      expiresAt: 4102444800000, // year 2100, comfortably unexpired
+    }),
+    listMyRepos: async (token) => {
+      remote.lastListToken = token;
+      return [{ full_name: 'tester/x' }];
+    },
   };
 });
 
@@ -59,8 +70,8 @@ vi.mock('./door43', () => ({
     '1:1\tcd34\t\tΘεοῦ\t1\trc://*/tw/dict/bible/kt/god\n',
 }));
 
-const { syncProject } = await import('./sync');
-const { saveProject, getCheckStates, saveCheckStates } = await import('./store');
+const { syncProject, listMyRepos } = await import('./sync');
+const { saveProject, getCheckStates, saveCheckStates, saveDcsAuth } = await import('./store');
 
 const AUTH = { username: 'tester', token: 'fake', kind: 'pat' };
 
@@ -95,6 +106,8 @@ beforeEach(() => {
   remote.exists = false;
   remote.files = null;
   remote.commits = 0;
+  remote.refreshes = 0;
+  remote.lastListToken = null;
 });
 
 describe('syncProject end-to-end (fake DCS)', () => {
@@ -171,5 +184,24 @@ describe('syncProject end-to-end (fake DCS)', () => {
     expect(again.pulled).toBe(0);
     expect(again.pushed).toBe(0);
     expect(remote.commits).toBe(1);
+  });
+
+  it('expired OAuth token is refreshed from the store, not the stale in-memory copy', async () => {
+    // The store is the source of truth; a prior op already rotated to RT-stored.
+    const stored = {
+      username: 'tester', kind: 'oauth',
+      token: 'access-stored', refreshToken: 'RT-stored', expiresAt: 1, // past (truthy) = expired
+    };
+    await saveDcsAuth(stored);
+    // The UI still holds an even older copy — the bug this guards against was
+    // refreshing with a token the store had already superseded.
+    const staleInMemory = { ...stored, token: 'access-ancient', refreshToken: 'RT-ancient' };
+
+    const repos = await listMyRepos(staleInMemory);
+
+    expect(repos).toEqual([{ full_name: 'tester/x' }]);
+    expect(remote.refreshes).toBe(1); // refreshed exactly once, off the stored token
+    expect(remote.lastListToken).toBe('access-1'); // used the freshly minted token
+    expect((await db.get('dcs:auth')).token).toBe('access-1'); // rotation persisted
   });
 });

@@ -11,8 +11,7 @@ import {
   saveCheckStates,
 } from '../lib/store';
 import { importBurrito, seedStatesFromDecisions } from '../lib/tc4';
-import { syncProject, fetchProjectFromDcs } from '../lib/sync';
-import { listMyRepos } from '../lib/dcs';
+import { syncProject, fetchProjectFromDcs, listMyRepos } from '../lib/sync';
 
 export function Home({ onOpen, auth }) {
   const [projects, setProjects] = useState([]);
@@ -103,7 +102,7 @@ export function Home({ onOpen, auth }) {
     setError(null);
     setBusy(true);
     try {
-      setMyRepos(await listMyRepos(auth.token));
+      setMyRepos(await listMyRepos(auth));
     } catch (err) {
       setError(String(err.message || err));
     } finally {

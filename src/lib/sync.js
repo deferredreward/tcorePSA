@@ -19,7 +19,7 @@ import { importBurrito, buildBurritoFiles, seedStatesFromDecisions } from './tc4
 import { fetchTnTsv, fetchTwlTsv } from './door43';
 import { parseTnChecks, parseTwChecks } from './checks';
 import { getVerseText } from './verses';
-import { getProject, getCheckStates, saveCheckStates, saveProject, getBurrito, saveBurrito, saveDcsAuth } from './store';
+import { getProject, getCheckStates, saveCheckStates, saveProject, getBurrito, saveBurrito, getDcsAuth, saveDcsAuth } from './store';
 import { getActorId, getJournal } from './journal';
 
 // git blob sha1 of file bytes ("blob <len>\0" + content) — matches the shas
@@ -72,6 +72,15 @@ export async function ensureFreshAuth(auth) {
   return fresh;
 }
 
+// Resolve the real auth for an operation. The persisted record is the source
+// of truth: a refresh rotates the token and saves the new one, but callers
+// hold the old copy in React state — so read from the store (falling back to
+// the passed hint) and then refresh if the access token has expired. This is
+// why every DCS entry point below funnels through here.
+async function resolveAuth(auth) {
+  return ensureFreshAuth((await getDcsAuth()) || auth);
+}
+
 const readJson = (files, path) => (files[path] ? JSON.parse(strFromU8(files[path])) : null);
 
 function contextFromFiles(files) {
@@ -88,8 +97,8 @@ function contextFromFiles(files) {
 // sync — `promptRepoName(default)` lets the UI confirm the new repo's name).
 // Returns {pulled, pushed, repoUrl} or {cancelled: true}.
 export async function syncProject(projectId, auth, { promptRepoName } = {}) {
+  auth = await resolveAuth(auth);
   if (!auth?.token) throw new Error('Sign in to your Door43 account first');
-  auth = await ensureFreshAuth(auth);
   let project = await getProject(projectId);
   if (!project) throw new Error('Project not found');
   const book = project.bookCode.toUpperCase();
@@ -98,9 +107,9 @@ export async function syncProject(projectId, auth, { promptRepoName } = {}) {
   let link = project.dcs;
   if (!link) {
     const defaultName = `${project.bookCode.toLowerCase()}_checks`;
-    const name = promptRepoName ? promptRepoName(defaultName) : defaultName;
-    if (!name) return { cancelled: true };
-    link = { owner: auth.username, repo: name.trim(), branch: 'master' };
+    const name = (promptRepoName ? promptRepoName(defaultName) : defaultName)?.trim();
+    if (!name) return { cancelled: true }; // blank / whitespace-only = cancelled
+    link = { owner: auth.username, repo: name, branch: 'master' };
   }
   const { owner, repo } = link;
   const branch = link.branch || 'master';
@@ -182,12 +191,20 @@ export async function syncProject(projectId, auth, { promptRepoName } = {}) {
   return { pulled, pushed: changes.length, repoUrl: `${dcs.DCS_HOST}/${project.dcs.owner}/${project.dcs.repo}` };
 }
 
+// The signed-in user's repos — funnels through resolveAuth so an expired
+// OAuth token is refreshed first (same as every other DCS operation).
+export async function listMyRepos(auth) {
+  auth = await resolveAuth(auth);
+  if (!auth?.token) throw new Error('Sign in to your Door43 account first');
+  return dcs.listMyRepos(auth.token);
+}
+
 // Fetch a Door43 repo as a burrito zip for import. Returns {zip, dcs, name};
 // the Home import path creates the projects and stamps the dcs link on them.
 export async function fetchProjectFromDcs(input, auth) {
   const ref = dcs.parseRepoRef(input);
   if (!ref) throw new Error('Enter a Door43 repo like owner/name or paste its URL');
-  auth = await ensureFreshAuth(auth);
+  auth = await resolveAuth(auth);
   const info = await dcs.getRepo(ref.owner, ref.repo, auth?.token);
   if (!info) throw new Error(`Repo not found on Door43: ${ref.owner}/${ref.repo}`);
   const branch = info.default_branch || 'master';
