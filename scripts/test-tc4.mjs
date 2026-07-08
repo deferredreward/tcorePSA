@@ -89,6 +89,14 @@ check('import: span verse keys stay strings in seeded ids',
   }))[0] === 'tn-2:9-10-zz99');
 check('import: invalidated records seed as needs-re-review, not done',
   seeded['tn-1:4-gr8c']?.invalidated === true && seeded['tn-1:1-swi9']?.invalidated === false);
+check('import: colliding (checkId, reference) keeps the newer decision, not file order',
+  seedStatesFromDecisions({
+    tn: [
+      { contextId: { checkId: 'dup1', reference: { bookId: 'tit', chapter: 1, verse: 1 } }, comments: 'older', modifiedTimestamp: '2026-01-01T00:00:00Z' },
+      { contextId: { checkId: 'dup1', reference: { bookId: 'tit', chapter: 1, verse: 1 } }, comments: 'newer', modifiedTimestamp: '2026-06-01T00:00:00Z' },
+      { contextId: { checkId: 'dup1', reference: { bookId: 'tit', chapter: 1, verse: 1 } }, comments: 'oldest', modifiedTimestamp: '2025-01-01T00:00:00Z' },
+    ],
+  })['tn-1:1-dup1']?.comment === 'newer');
 
 // miniature check lists mirroring the fixture's decision records (what the
 // PWA derives from the pinned TSVs at load time)

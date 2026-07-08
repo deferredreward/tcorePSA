@@ -147,21 +147,33 @@ export function importBurrito(zipBytes) {
 }
 
 // Imported decision records -> PWA check states keyed by the PWA check id
-// (`tn-1:1-swi9`); span verses key naturally ("9-10" is already a string)
+// (`tn-1:1-swi9`); span verses key naturally ("9-10" is already a string).
+// The key intentionally matches checks.js's `check.id` (`<tool>-<ref>-<ID>`,
+// occurrence-free) so seeded states attach to their checks — do NOT add
+// occurrence here or nothing would line up. The TSV row ID is unique per file,
+// so checkId+reference already identify a record and occurrence (part of the
+// §5.2 identity key) is redundant for keying. Guard anyway against a malformed
+// file that repeats a (checkId, reference): keep the newer decision rather than
+// letting file order silently decide the winner.
 export function seedStatesFromDecisions(decisionsByTool) {
   const states = {};
   for (const [tool, records] of Object.entries(decisionsByTool)) {
     for (const d of records) {
       const r = d.contextId?.reference;
       if (!r || d.contextId.checkId == null) continue;
-      states[`${tool}-${r.chapter}:${r.verse}-${d.contextId.checkId}`] = {
+      const key = `${tool}-${r.chapter}:${r.verse}-${d.contextId.checkId}`;
+      const modifiedAt = d.modifiedTimestamp;
+      const existing = states[key];
+      if (existing && !(modifiedAt && (!existing.modifiedAt || modifiedAt > existing.modifiedAt)))
+        continue;
+      states[key] = {
         selections: Array.isArray(d.selections) ? d.selections : [],
         comment: typeof d.comments === 'string' ? d.comments : '',
         reminder: !!d.reminders,
         nothingToSelect: !!d.nothingToSelect,
         // needs re-review (tC3 invalidation) — the UI must not count it as done
         invalidated: !!(d.invalidated || d.status === 'invalid'),
-        modifiedAt: d.modifiedTimestamp,
+        modifiedAt,
       };
     }
   }
