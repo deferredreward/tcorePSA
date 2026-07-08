@@ -172,6 +172,22 @@ describe('importTc3', () => {
     expect(r11.invalidated).toBe(false);
   });
 
+  it('ignores verseEdits (edit history, not a checking decision)', () => {
+    const verseEdit = {
+      contextId: { reference: { bookId: 'oba', chapter: 1, verse: 3 }, tool: 'translationNotes', groupId: 'figs-metaphor', occurrence: 1 },
+      // a tC3 verse edit records before/after text, not selections
+      userName: 'deferredreward',
+      modifiedTimestamp: '2026-07-08T19:31:00.000Z',
+    };
+    const zip = buildZip(
+      Object.fromEntries([cd('verseEdits', 1, 3, '2026-07-08T19_31_00.000Z', verseEdit)]),
+    );
+    const t = importTc3(zip);
+    // the two real selections import; the verse edit does NOT become a 3rd decision
+    expect(t.decisions.tn).toHaveLength(2);
+    expect(t.decisions.tn.some((d) => d.contextId.reference.verse === 3)).toBe(false);
+  });
+
   it('throws on a zip that is not a tC3 project', () => {
     expect(() => importTc3(zipSync({ 'readme.txt': strToU8('hi') }))).toThrow(/no manifest\.json/i);
   });

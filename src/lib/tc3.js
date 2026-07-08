@@ -15,6 +15,11 @@
 //       — decisions are SPLIT across per-category files (tc4 merges them into
 //         one record), each timestamped; newest per (identity, category) wins.
 //
+// `verseEdits` is deliberately NOT imported (see IGNORED_CATEGORIES): it is an
+// audit trail of target-text edits, not a checking decision — the edited text
+// itself is already in <book>.usfm, which we import — and tC itself never counts
+// a verse edit as a completed check (only selections/nothingToSelect count).
+//
 // Pure module (no IndexedDB/DOM) so it runs in node tests as-is.
 
 import { unzipSync, strFromU8 } from 'fflate';
@@ -34,6 +39,13 @@ const CATEGORY_FIELDS = {
   comments: (r) => ({ comments: typeof r.text === 'string' ? r.text : '' }),
   reminders: (r) => ({ reminders: !!r.enabled }),
   invalidated: (r) => ({ invalidated: !!r.invalidated }),
+};
+
+// tC3 checkData categories we recognize but intentionally do not import, with
+// the reason. Kept explicit (rather than falling through the CATEGORY_FIELDS
+// miss) so a dropped category is a documented decision, not a silent omission.
+const IGNORED_CATEGORIES = {
+  verseEdits: 'target-text edit history — the edited text is already in <book>.usfm, and tC does not count an edit as a completed check',
 };
 
 const CHECKDATA_RE =
@@ -149,7 +161,8 @@ function mergeCheckData(raw, prefix) {
     const m = CHECKDATA_RE.exec(path.slice(prefix.length));
     if (!m) continue;
     const category = m[1];
-    if (!CATEGORY_FIELDS[category]) continue;
+    if (IGNORED_CATEGORIES[category]) continue; // deliberate, documented skip
+    if (!CATEGORY_FIELDS[category]) continue; //   unrecognized category — not modeled
     const record = parseJsonAt(raw, path);
     const ctx = record?.contextId;
     const tool = ctx && TOOL_SHORT[ctx.tool];
