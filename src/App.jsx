@@ -4,9 +4,9 @@ import { CheckList, checkProgress } from './components/CheckList';
 import { GroupList } from './components/GroupList';
 import { CheckRunner } from './components/CheckRunner';
 import { Report } from './components/Report';
-import { fetchTnTsv, fetchTwlTsv, fetchUltUsfm } from './lib/door43';
+import { fetchTnTsv, fetchTwlTsv, fetchUltUsfm, fetchOlUsfm } from './lib/door43';
 import { parseTnChecks, parseTwChecks, groupChecks } from './lib/checks';
-import { parseAlignments } from './lib/alignment';
+import { parseBook } from './lib/alignment';
 import { getVerseText } from './lib/verses';
 import { getProject, getCheckStates, saveCheckState, getBurrito } from './lib/store';
 import { appendDecisionEvent } from './lib/journal';
@@ -20,7 +20,7 @@ export function App() {
   const [skipped, setSkipped] = useState({ tn: 0, tw: 0 });
   const [states, setStates] = useState({});
   const [pins, setPins] = useState(null); // tC4 resource pins (BURRITO-SPEC §5.3)
-  const [alignments, setAlignments] = useState(null); // ULT word alignments for English glosses
+  const [alignments, setAlignments] = useState(null); // { sourceBook (OL), targetBook (ULT) } for English glosses
   const [loadError, setLoadError] = useState(null);
 
   const groups = useMemo(
@@ -41,10 +41,13 @@ export function App() {
       // imported tC4 projects check against their pinned resource versions
       const projectPins = p.tc4 ? (await getBurrito(p.tc4.importId))?.pins || null : null;
       setPins(projectPins);
-      // Load the aligned ULT in the background — it powers the English gloss of
-      // each original-language quote, but checks shouldn't wait on it.
-      fetchUltUsfm(p.bookCode)
-        .then((usfmText) => setAlignments(parseAlignments(usfmText)))
+      // Load the original-language (UHB/UGNT) and ULT books in the background —
+      // together they power the English gloss of each quote, but checks shouldn't
+      // wait on them.
+      Promise.all([fetchOlUsfm(p.bookCode), fetchUltUsfm(p.bookCode)])
+        .then(([olUsfm, ultUsfm]) =>
+          setAlignments({ sourceBook: parseBook(olUsfm), targetBook: parseBook(ultUsfm) }),
+        )
         .catch(() => {});
       const [tnTsv, twlTsv] = await Promise.all([
         fetchTnTsv(p.bookCode, projectPins?.translationNotes),

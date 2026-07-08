@@ -21,13 +21,13 @@ Useful entry points in `../translationCore/src/js`:
 - `components/`, `containers/`, `pages/` — desktop UI (reference for what data each check screen shows).
 
 Relevant packages tC depends on (same ones we use / could use): `usfm-js`, `word-aligner`,
-`tsv-groupdata-parser`, `tc-ui-toolkit` (the latter's `getAlignedText` is the canonical
-alignment-gloss routine).
+`tsv-groupdata-parser`. For the English gloss of a quote we use unfoldingWord's maintained
+`uw-quote-helpers` (`getTargetQuoteFromSourceQuote`) rather than tC's React-bound `tc-ui-toolkit`
+— see [STATE.md](STATE.md) for why.
 
 Other sibling repos under `../` worth consulting: `gateway-edit`, `tc-create-app`.
 
 ## Working state
 
-See [STATE.md](STATE.md) for design decisions and known gaps — including the measured divergence
-between our `src/lib/alignment.js` and tC's `getAlignedText` (it is **not** a faithful port and
-needs rework).
+See [STATE.md](STATE.md) for design decisions and how each piece is implemented — including the
+quote-gloss story (`src/lib/alignment.js` → `uw-quote-helpers`) and the evidence behind that choice.

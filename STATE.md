@@ -34,10 +34,12 @@ Known gaps:
 - **Multi-book exports update only the current book** — sibling books' decision files round-trip
   verbatim from import; states checked in a sibling PWA project are not merged in.
 - **tN quote arrays use within-quote occurrence counting**, exact only when the quote occurs
-  once in the verse. Same architectural root as the alignment.js gap below: we never resolve
-  quotes against the OL Bible. The fix path below (`tsv-groupdata-parser`) would fix both.
-- **The en_ULT used for English glosses is unpinned** (master) — §5.3 has no gateway-bible slot
-  yet (`extraScripture` is not normative until tC4's first J2 increment).
+  once in the verse — this tc4 path does not resolve quotes against the OL Bible. The English-gloss
+  path had the same root gap but was since fixed by adopting `uw-quote-helpers` (see below); this
+  path could adopt the same for exact per-word occurrences.
+- **The en_ULT and UHB/UGNT used for English glosses are unpinned** (master) — §5.3 has no
+  gateway-bible / original-language slot yet (`extraScripture` is not normative until tC4's first
+  J2 increment).
 
 Spec feedback owed to the tC4 team:
 
@@ -51,18 +53,25 @@ Spec feedback owed to the tC4 team:
 
 ## English gloss of quotes — `src/lib/alignment.js`
 
-**Status: works for simple quotes, materially degraded on ~40% of real quotes. NOT a faithful
-port of translationCore. Needs rework — see fix path below.**
+**Status: RESOLVED. `src/lib/alignment.js` now delegates to the maintained
+[`uw-quote-helpers`](https://www.npmjs.com/package/uw-quote-helpers) package
+(`getTargetQuoteFromSourceQuote`). The hand-rolled matcher is gone from the code; the analysis
+below is kept as the rationale for the switch.**
 
-The feature shows the English (ULT) gloss of a check's original-language quote. tC's canonical
-routine is `getAlignedText(verseObjects, quote, occurrence)` in
-`tc-ui-toolkit` (`src/VerseCheck/helpers/checkAreaHelpers.js`), wrapped by `getAlignedGLText` /
-`getAlignedTextFromBible` in `../translationCore/src/js/helpers/gatewayLanguageHelpers.js`.
-Our `glossQuote` was written from scratch, not ported.
+The feature shows the English (ULT) gloss of a check's original-language quote. `uw-quote-helpers`
+matches the quote against the original-language book (UHB/UGNT = `sourceBook`) and pulls the aligned
+words from the ULT (`targetBook`) — the same source→target model tC uses, handling word order,
+per-word occurrence, verse spans and discontiguous (`&`) quotes. So `App.jsx` now fetches the OL
+book alongside the ULT (`fetchOlUsfm`), and `glossQuote` is a thin wrapper.
 
-### Measured divergence (evidence, not assumption)
+Verified: the Obadiah 1:10 case that motivated the rework (`תְּכַסְּךָ בוּשָׁה`, where quote order ≠
+verse order) now returns **"shame will cover you"** instead of nothing; OT (Ruth/UHB) and NT
+(Titus/UGNT) both glossed correctly in-app.
 
-I transcribed tC's `getAlignedText` and ran it head-to-head with `glossQuote` over **every tN quote
+### Why we replaced the hand-rolled version (measured evidence)
+
+The original `glossQuote` was written from scratch (not ported). I transcribed tC's `getAlignedText`
+(from `tc-ui-toolkit`) and ran it head-to-head with that version over **every tN quote
 in Ruth (288) and Titus (202) = 490 quotes**, against the real ULT alignment. To compare algorithms
 (not the normalization gap — see below), tC's inputs were normalized the same way `glossQuote`
 normalizes, and occurrence coerced to numeric.
@@ -103,12 +112,15 @@ Caveat on the numbers: to test, tC was fed the raw quote *string* (occurrence ap
 which is not how real tC runs multi-word quotes (it uses the resolved per-word array). So true tC would
 be *even better* than the "tC" column here — these numbers understate the gap.
 
-### Fix path
+### How it was resolved
 
-Adopt tC's architecture rather than the shortcut:
-1. Resolve each tN/tW quote against the OL Bible to get exact content + per-word occurrences —
-   ideally by pulling in `tsv-groupdata-parser` (what tC uses), which also builds the group data.
-2. Replace `glossQuote` with a port of `getAlignedText` operating on raw ULT `verseObjects`
-   (keep the tree; don't pre-flatten), so nesting, per-word occurrence, gaps, and punctuation are
-   handled as tC does.
-3. Keep normalization only as the bridge in the content-matching step if quote resolution still needs it.
+Rather than porting `getAlignedText` by hand (and re-implementing the OL quote-resolution step it
+depends on), we pulled in **`uw-quote-helpers`** — unfoldingWord's maintained, non-React library that
+does exactly this (source→target quote glossing with OL matching + verse-span support). Notes on the
+pull-in:
+- **Not `tc-ui-toolkit`.** That package carries `getAlignedText`, but it drags in React / Material-UI /
+  react-bootstrap and pins `usfm-js@^2` (we're on 3.x → peer conflict). Wrong dependency for a Preact PWA.
+- `uw-quote-helpers` peer-deps `usfm-js@^3.4.2` (matches ours), adds ~13 small packages, no React,
+  and bundles cleanly in Vite.
+- This also let us delete the fuzzy accent-normalization + contiguity code entirely — the library
+  matches against the real OL text, so no bridging hack is needed.
