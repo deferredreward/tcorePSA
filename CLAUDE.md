@@ -27,7 +27,22 @@ Relevant packages tC depends on (same ones we use / could use): `usfm-js`, `word
 
 Other sibling repos under `../` worth consulting: `gateway-edit`, `tc-create-app`.
 
+## tC4 / Scripture Burrito interop
+
+This app imports and exports **translationCore 4** projects (one project = one Scripture Burrito
+git repo). The project format we implement is [docs/BURRITO-SPEC.md](docs/BURRITO-SPEC.md)
+(BURRITO-SPEC 1.1-draft) — the normative contract for `src/lib/tc4.js`; conformance is checked by
+`npm run test:tc4` against `test/fixtures/sample-burrito/`.
+
+The full tC4 reference package (the spec plus internal unfoldingWord/Pankosmia direction &
+architecture docs, the original sample project, and its `boon`/harness validators) is kept
+**outside this public repo** at `../tc4-pankosmia-package/`
+(`C:/Users/benja/Documents/GitHub/tcc-ge-dcs/tc4-pankosmia-package/`) — those companion docs are
+internal partnership material and are deliberately not committed here. Only the neutral, technical
+BURRITO-SPEC lives in-tree.
+
 ## Working state
 
 See [STATE.md](STATE.md) for design decisions and how each piece is implemented — including the
-quote-gloss story (`src/lib/alignment.js` → `uw-quote-helpers`) and the evidence behind that choice.
+tC4 / Scripture Burrito interop notes and the quote-gloss story (`src/lib/alignment.js` →
+`uw-quote-helpers`) and the evidence behind that choice.
