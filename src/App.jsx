@@ -1,14 +1,16 @@
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import { Home } from './components/Home';
 import { CheckList, checkProgress } from './components/CheckList';
 import { GroupList } from './components/GroupList';
 import { CheckRunner } from './components/CheckRunner';
 import { Report } from './components/Report';
+import { Door43Account } from './components/Door43Account';
 import { fetchTnTsv, fetchTwlTsv, fetchUltUsfm, fetchOlUsfm } from './lib/door43';
+import { completeOAuth } from './lib/dcs';
 import { parseTnChecks, parseTwChecks, groupChecks } from './lib/checks';
 import { parseBook } from './lib/alignment';
 import { getVerseText } from './lib/verses';
-import { getProject, getCheckStates, saveCheckState, getBurrito } from './lib/store';
+import { getProject, getCheckStates, saveCheckState, getBurrito, getDcsAuth, saveDcsAuth } from './lib/store';
 import { appendDecisionEvent } from './lib/journal';
 
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
@@ -22,6 +24,23 @@ export function App() {
   const [pins, setPins] = useState(null); // tC4 resource pins (BURRITO-SPEC §5.3)
   const [alignments, setAlignments] = useState(null); // { sourceBook (OL), targetBook (ULT) } for English glosses
   const [loadError, setLoadError] = useState(null);
+  const [auth, setAuth] = useState(null); // Door43 account (optional; app works signed-out)
+  const [showAccount, setShowAccount] = useState(false);
+  const [authError, setAuthError] = useState(null);
+
+  // Load any saved Door43 account; finish an OAuth redirect if we're returning
+  // from one (runs regardless of whether the account panel is open).
+  useEffect(() => {
+    getDcsAuth().then((a) => a && setAuth(a));
+    completeOAuth()
+      .then((a) => {
+        if (a) {
+          saveDcsAuth(a);
+          setAuth(a);
+        }
+      })
+      .catch((err) => setAuthError(String(err.message || err)));
+  }, []);
 
   const groups = useMemo(
     () => (checks ? { tn: groupChecks(checks.tn), tw: groupChecks(checks.tw) } : null),
@@ -119,10 +138,39 @@ export function App() {
       <header class="topbar">
         {route.view !== 'home' && <button onClick={back} aria-label="Back">‹</button>}
         <h1>{title}</h1>
-        {route.view === 'home' && <span class="sub">notes & words PoC</span>}
+        {route.view === 'home' && (
+          <button
+            class="account-btn"
+            onClick={() => setShowAccount((v) => !v)}
+            aria-label="Door43 account"
+          >
+            {auth ? `@${auth.username}` : 'Sign in'}
+          </button>
+        )}
+        {showAccount && route.view === 'home' && (
+          <>
+            <div class="account-overlay" onClick={() => setShowAccount(false)} />
+            <div class="account-menu">
+              <Door43Account
+                auth={auth}
+                onAuthChange={(a) => {
+                  setAuth(a);
+                  setAuthError(null);
+                  if (a) setShowAccount(false);
+                }}
+              />
+            </div>
+          </>
+        )}
       </header>
 
-      {route.view === 'home' && <Home onOpen={openProject} />}
+      {authError && route.view === 'home' && (
+        <p class="error" style="padding:8px 14px;margin:0">
+          Door43 sign-in: {authError}
+        </p>
+      )}
+
+      {route.view === 'home' && <Home onOpen={openProject} auth={auth} />}
 
       {route.view === 'project' && (
         <div class="screen">

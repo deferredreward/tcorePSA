@@ -9,18 +9,18 @@ import {
   deleteProject,
   saveBurrito,
   saveCheckStates,
-  getDcsAuth,
 } from '../lib/store';
 import { importBurrito, seedStatesFromDecisions } from '../lib/tc4';
-import { syncProject } from '../lib/sync';
-import { Door43Card } from './Door43Card';
+import { syncProject, fetchProjectFromDcs } from '../lib/sync';
+import { listMyRepos } from '../lib/dcs';
 
-export function Home({ onOpen }) {
+export function Home({ onOpen, auth }) {
   const [projects, setProjects] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [auth, setAuth] = useState(null);
   const [syncStatus, setSyncStatus] = useState({}); // projectId -> message
+  const [repoRef, setRepoRef] = useState('');
+  const [myRepos, setMyRepos] = useState(null);
 
   async function refresh() {
     const ids = await listProjects();
@@ -29,7 +29,6 @@ export function Home({ onOpen }) {
   }
   useEffect(() => {
     refresh();
-    getDcsAuth().then(setAuth);
   }, []);
 
   async function addProject(usfmText, sourceName) {
@@ -81,6 +80,35 @@ export function Home({ onOpen }) {
       if (Object.keys(seeded).length) await saveCheckStates(project.id, seeded);
     }
     await refresh();
+  }
+
+  // Pull a Door43 repo down as a new project (or set of book projects),
+  // stamping the dcs link on each so it syncs back to that repo.
+  async function importRepo(ref) {
+    setError(null);
+    setBusy(true);
+    try {
+      const fetched = await fetchProjectFromDcs(ref, auth);
+      await addBurrito(fetched.zip, fetched.name, fetched.dcs);
+      setRepoRef('');
+      setMyRepos(null);
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function showMyRepos() {
+    setError(null);
+    setBusy(true);
+    try {
+      setMyRepos(await listMyRepos(auth.token));
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function sync(projectId) {
@@ -168,14 +196,53 @@ export function Home({ onOpen }) {
             {busy ? 'Loading…' : 'Sample: Ruth (OT)'}
           </button>
         </div>
+        {auth && (
+          <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+            <p class="muted" style="margin:0 0 8px">
+              …or import a project you’ve synced to Door43:
+            </p>
+            <div class="row">
+              <input
+                type="text"
+                class="grow"
+                placeholder="owner/repo or Door43 URL"
+                value={repoRef}
+                onInput={(e) => setRepoRef(e.target.value)}
+                autocapitalize="off"
+              />
+              <button
+                class="secondary"
+                onClick={() => importRepo(repoRef)}
+                disabled={busy || !repoRef.trim()}
+              >
+                Import
+              </button>
+              <button class="secondary" onClick={showMyRepos} disabled={busy}>
+                My repos
+              </button>
+            </div>
+            {myRepos && !myRepos.length && (
+              <p class="muted">No repos under @{auth.username} yet.</p>
+            )}
+            {myRepos?.map((r) => (
+              <div class="row" style="align-items:center;margin-top:6px" key={r.full_name}>
+                <span class="grow" style="overflow:hidden;text-overflow:ellipsis;font-size:0.9rem">
+                  {r.full_name}
+                </span>
+                <button
+                  class="secondary"
+                  style="padding:6px 10px"
+                  onClick={() => importRepo(r.full_name)}
+                  disabled={busy}
+                >
+                  Import
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {error && <p class="error">{error}</p>}
       </div>
-
-      <Door43Card
-        auth={auth}
-        onAuthChange={setAuth}
-        onImport={({ zip, name, dcs }) => addBurrito(zip, name, dcs)}
-      />
 
       <h2 style="font-size:0.95rem;color:var(--ocean)">Projects</h2>
       {!projects.length && <p class="muted">No projects yet.</p>}

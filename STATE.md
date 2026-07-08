@@ -88,6 +88,13 @@ online, pick up on another. Design decisions:
   to their source repo. Multiple single-book projects pointed at one repo accumulate books.
 - **The SW must not cache DCS API state** — `vite.config.js` runtimeCaching now excludes
   `/api/` and `/login/` (a stale branch head would make sync diff against an outdated tree).
+- **UI keeps auth out of the way.** The account lives in a compact "Sign in" / "@username" pill
+  in the header (`Door43Account.jsx`, a collapsed dropdown) — the signed-out Home is just
+  USFM-upload + samples. Importing a Door43 repo appears inside "Add a translation" only when
+  signed in; per-project sync is the `⇅` button on each project row and on the report screen.
+  OAuth is the primary button when `VITE_DCS_CLIENT_ID` is set (mirrors bible-editor's
+  "Sign in with Door43"); the password/token form is the fallback (behind a disclosure when
+  OAuth is available, inline otherwise). `App.jsx` owns `auth` and runs `completeOAuth()` on load.
 
 Known gaps: no delete propagation (removing a project locally never touches DCS); race between
 archive download and commit is unguarded (a concurrent push mid-sync could be overwritten for
