@@ -15,7 +15,8 @@
     "preact": "^10.25.4",
     "selections": "0.1.7",
     "string-punctuation-tokenizer": "^2.2.0",
-    "usfm-js": "3.4.3"
+    "usfm-js": "3.4.3",
+    "uw-quote-helpers": "^1.1.7"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.9.3",

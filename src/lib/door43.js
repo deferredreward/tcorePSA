@@ -1,5 +1,5 @@
 import { get, set } from 'idb-keyval';
-import { usfmFileNumber } from './books';
+import { usfmFileNumber, isNewTestament } from './books';
 
 const BASE = 'https://git.door43.org/unfoldingWord';
 
@@ -48,10 +48,18 @@ export function fetchSampleUsfm(fileNum, bookCode) {
   return fetchCached(`${BASE}/en_ult/raw/branch/master/${fileNum}-${bookCode}.usfm`);
 }
 
-// The aligned en_ULT for a book — its word alignments let us gloss the
-// original-language quotes into English.
+// The aligned en_ULT for a book — the target (English) text we gloss quotes into.
 export function fetchUltUsfm(bookCode) {
   const fileNum = usfmFileNumber(bookCode);
   if (!fileNum) return Promise.reject(new Error(`Unknown book code: ${bookCode}`));
   return fetchCached(`${BASE}/en_ult/raw/branch/master/${fileNum}-${bookCode}.usfm`);
+}
+
+// The original-language text for a book (UHB Hebrew for OT, UGNT Greek for NT).
+// tN/tW quotes are original-language, so this is the source book quotes match against.
+export function fetchOlUsfm(bookCode) {
+  const fileNum = usfmFileNumber(bookCode);
+  if (!fileNum) return Promise.reject(new Error(`Unknown book code: ${bookCode}`));
+  const repo = isNewTestament(bookCode) ? 'el-x-koine_ugnt' : 'hbo_uhb';
+  return fetchCached(`${BASE}/${repo}/raw/branch/master/${fileNum}-${bookCode}.usfm`);
 }

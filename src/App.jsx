@@ -4,9 +4,9 @@ import { CheckList, checkProgress } from './components/CheckList';
 import { GroupList } from './components/GroupList';
 import { CheckRunner } from './components/CheckRunner';
 import { Report } from './components/Report';
-import { fetchTnTsv, fetchTwlTsv, fetchUltUsfm } from './lib/door43';
+import { fetchTnTsv, fetchTwlTsv, fetchUltUsfm, fetchOlUsfm } from './lib/door43';
 import { parseTnChecks, parseTwChecks, groupChecks } from './lib/checks';
-import { parseAlignments } from './lib/alignment';
+import { parseBook } from './lib/alignment';
 import { getVerseText } from './lib/verses';
 import { getProject, getCheckStates, saveCheckState } from './lib/store';
 
@@ -18,7 +18,7 @@ export function App() {
   const [checks, setChecks] = useState(null); // {tn: [], tw: []} filtered to uploaded verses
   const [skipped, setSkipped] = useState({ tn: 0, tw: 0 });
   const [states, setStates] = useState({});
-  const [alignments, setAlignments] = useState(null); // ULT word alignments for English glosses
+  const [alignments, setAlignments] = useState(null); // { sourceBook (OL), targetBook (ULT) } for English glosses
   const [loadError, setLoadError] = useState(null);
 
   const groups = useMemo(
@@ -36,10 +36,13 @@ export function App() {
       const p = await getProject(id);
       setProject(p);
       setStates(await getCheckStates(id));
-      // Load the aligned ULT in the background — it powers the English gloss of
-      // each original-language quote, but checks shouldn't wait on it.
-      fetchUltUsfm(p.bookCode)
-        .then((usfmText) => setAlignments(parseAlignments(usfmText)))
+      // Load the original-language (UHB/UGNT) and ULT books in the background —
+      // together they power the English gloss of each quote, but checks shouldn't
+      // wait on them.
+      Promise.all([fetchOlUsfm(p.bookCode), fetchUltUsfm(p.bookCode)])
+        .then(([olUsfm, ultUsfm]) =>
+          setAlignments({ sourceBook: parseBook(olUsfm), targetBook: parseBook(ultUsfm) }),
+        )
         .catch(() => {});
       const [tnTsv, twlTsv] = await Promise.all([
         fetchTnTsv(p.bookCode),
