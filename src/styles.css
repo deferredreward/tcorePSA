@@ -39,6 +39,45 @@ html, body {
 .topbar .sub { font-size: 0.75rem; opacity: 0.8; }
 .topbar button { background: none; border: none; color: #fff; font-size: 1.4rem; padding: 4px 8px; cursor: pointer; }
 
+/* Compact Door43 account control in the header */
+.topbar button.account-btn {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 20px;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.account-overlay { position: fixed; inset: 0; z-index: 15; }
+.account-menu {
+  position: absolute;
+  top: 100%;
+  right: 8px;
+  width: min(340px, calc(100vw - 16px));
+  background: var(--card);
+  color: var(--tech);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(1, 66, 99, 0.22);
+  padding: 14px;
+  z-index: 20;
+}
+.card input[type='text'],
+.card input[type='password'],
+.account-menu input {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+  font-size: 0.95rem;
+  min-width: 0;
+}
+.account-menu input { width: 100%; }
+
 .screen { padding: 14px; padding-bottom: calc(env(safe-area-inset-bottom) + 90px); }
 
 .card {

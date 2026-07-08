@@ -28,6 +28,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # DCS OAuth2 public-client id (not a secret — it ships in the JS
+          # bundle). Set under repo Settings → Secrets and variables →
+          # Actions → Variables. Absent = the OAuth button hides and only
+          # the password/token sign-in shows.
+          VITE_DCS_CLIENT_ID: ${{ vars.DCS_CLIENT_ID }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

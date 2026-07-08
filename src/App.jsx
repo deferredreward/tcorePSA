@@ -1,14 +1,16 @@
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import { Home } from './components/Home';
 import { CheckList, checkProgress } from './components/CheckList';
 import { GroupList } from './components/GroupList';
 import { CheckRunner } from './components/CheckRunner';
 import { Report } from './components/Report';
-import { fetchTnTsv, fetchTwlTsv, fetchUltUsfm, fetchOlUsfm } from './lib/door43';
-import { parseTnChecks, parseTwChecks, groupChecks } from './lib/checks';
+import { Door43Account } from './components/Door43Account';
+import { fetchUltUsfm, fetchOlUsfm } from './lib/door43';
+import { completeOAuth } from './lib/dcs';
+import { loadChecks } from './lib/sync';
+import { groupChecks } from './lib/checks';
 import { parseBook } from './lib/alignment';
-import { getVerseText } from './lib/verses';
-import { getProject, getCheckStates, saveCheckState, getBurrito } from './lib/store';
+import { getProject, getCheckStates, saveCheckState, getBurrito, getDcsAuth, saveDcsAuth } from './lib/store';
 import { appendDecisionEvent } from './lib/journal';
 
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
@@ -22,11 +24,61 @@ export function App() {
   const [pins, setPins] = useState(null); // tC4 resource pins (BURRITO-SPEC §5.3)
   const [alignments, setAlignments] = useState(null); // { sourceBook (OL), targetBook (ULT) } for English glosses
   const [loadError, setLoadError] = useState(null);
+  const [auth, setAuth] = useState(null); // Door43 account (optional; app works signed-out)
+  const [showAccount, setShowAccount] = useState(false);
+  const [authError, setAuthError] = useState(null);
+
+  // Finish an OAuth redirect if we're returning from one, else load any saved
+  // Door43 account. Sequenced (not parallel) so the stored read can't land
+  // after — and clobber — a freshly minted OAuth token.
+  useEffect(() => {
+    (async () => {
+      try {
+        const fresh = await completeOAuth(); // null unless returning from OAuth
+        if (fresh) {
+          // persist before exposing the account — DCS ops resolve auth from the
+          // store, so setAuth must not outrun the write
+          await saveDcsAuth(fresh);
+          setAuth(fresh);
+          return;
+        }
+      } catch (err) {
+        setAuthError(String(err.message || err));
+      }
+      const stored = await getDcsAuth();
+      if (stored) setAuth(stored);
+    })();
+  }, []);
 
   const groups = useMemo(
     () => (checks ? { tn: groupChecks(checks.tn), tw: groupChecks(checks.tw) } : null),
     [checks],
   );
+
+  // Load a project's data into state (project, decisions, checks filtered to the
+  // uploaded verses, pins, alignments) without touching the route — so it can
+  // both open a project and refresh one in place after a sync pulled new source.
+  async function loadProjectData(id) {
+    const p = await getProject(id);
+    setProject(p);
+    setStates(await getCheckStates(id));
+    // imported tC4 projects check against their pinned resource versions
+    const projectPins = p.tc4 ? (await getBurrito(p.tc4.importId))?.pins || null : null;
+    setPins(projectPins);
+    // Load the original-language (UHB/UGNT) and ULT books in the background —
+    // together they power the English gloss of each quote, but checks shouldn't
+    // wait on them.
+    Promise.all([fetchOlUsfm(p.bookCode), fetchUltUsfm(p.bookCode)])
+      .then(([olUsfm, ultUsfm]) =>
+        setAlignments({ sourceBook: parseBook(olUsfm), targetBook: parseBook(ultUsfm) }),
+      )
+      .catch(() => {});
+    // partial-book support (fetch + filter to uploaded verses) is shared with
+    // sync so both derive the same check list
+    const { tn, tw, skipped } = await loadChecks(p, projectPins);
+    setChecks({ tn, tw });
+    setSkipped(skipped);
+  }
 
   async function openProject(id) {
     setRoute({ view: 'project' });
@@ -35,32 +87,7 @@ export function App() {
     setAlignments(null);
     setLoadError(null);
     try {
-      const p = await getProject(id);
-      setProject(p);
-      setStates(await getCheckStates(id));
-      // imported tC4 projects check against their pinned resource versions
-      const projectPins = p.tc4 ? (await getBurrito(p.tc4.importId))?.pins || null : null;
-      setPins(projectPins);
-      // Load the original-language (UHB/UGNT) and ULT books in the background —
-      // together they power the English gloss of each quote, but checks shouldn't
-      // wait on them.
-      Promise.all([fetchOlUsfm(p.bookCode), fetchUltUsfm(p.bookCode)])
-        .then(([olUsfm, ultUsfm]) =>
-          setAlignments({ sourceBook: parseBook(olUsfm), targetBook: parseBook(ultUsfm) }),
-        )
-        .catch(() => {});
-      const [tnTsv, twlTsv] = await Promise.all([
-        fetchTnTsv(p.bookCode, projectPins?.translationNotes),
-        fetchTwlTsv(p.bookCode),
-      ]);
-      // partial-book support: only keep checks whose verse exists in the upload
-      const filter = (list) => list.filter((c) => getVerseText(p, c.chapter, c.verse) != null);
-      const tn = parseTnChecks(tnTsv);
-      const tw = parseTwChecks(twlTsv);
-      const tnKept = filter(tn);
-      const twKept = filter(tw);
-      setChecks({ tn: tnKept, tw: twKept });
-      setSkipped({ tn: tn.length - tnKept.length, tw: tw.length - twKept.length });
+      await loadProjectData(id);
     } catch (err) {
       setLoadError(`Could not load checking resources: ${err.message || err}`);
     }
@@ -119,10 +146,39 @@ export function App() {
       <header class="topbar">
         {route.view !== 'home' && <button onClick={back} aria-label="Back">‹</button>}
         <h1>{title}</h1>
-        {route.view === 'home' && <span class="sub">notes & words PoC</span>}
+        {route.view === 'home' && (
+          <button
+            class="account-btn"
+            onClick={() => setShowAccount((v) => !v)}
+            aria-label="Door43 account"
+          >
+            {auth ? `@${auth.username}` : 'Sign in'}
+          </button>
+        )}
+        {showAccount && route.view === 'home' && (
+          <>
+            <div class="account-overlay" onClick={() => setShowAccount(false)} />
+            <div class="account-menu">
+              <Door43Account
+                auth={auth}
+                onAuthChange={(a) => {
+                  setAuth(a);
+                  setAuthError(null);
+                  if (a) setShowAccount(false);
+                }}
+              />
+            </div>
+          </>
+        )}
       </header>
 
-      {route.view === 'home' && <Home onOpen={openProject} />}
+      {authError && route.view === 'home' && (
+        <p class="error" style="padding:8px 14px;margin:0">
+          Door43 sign-in: {authError}
+        </p>
+      )}
+
+      {route.view === 'home' && <Home onOpen={openProject} auth={auth} />}
 
       {route.view === 'project' && (
         <div class="screen">
@@ -229,7 +285,23 @@ export function App() {
       )}
 
       {route.view === 'report' && checks && (
-        <Report project={project} checks={checks} states={states} skipped={skipped} pins={pins} />
+        <Report
+          project={project}
+          checks={checks}
+          states={states}
+          skipped={skipped}
+          pins={pins}
+          auth={auth}
+          onSynced={async () => {
+            // a sync may have merged remote decisions and pulled expanded source
+            // — reload everything (incl. the checklist) so counts aren't stale
+            try {
+              await loadProjectData(project.id);
+            } catch {
+              /* the sync itself succeeded; a refetch hiccup shouldn't surface here */
+            }
+          }}
+        />
       )}
     </>
   );

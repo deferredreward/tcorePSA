@@ -5,6 +5,7 @@ import { buildReportMarkdown, downloadText } from '../lib/report';
 import { exportBurrito } from '../lib/tc4';
 import { getActorId, getJournal } from '../lib/journal';
 import { getBurrito } from '../lib/store';
+import { syncProject, describeSyncResult } from '../lib/sync';
 import { isDone } from './CheckList';
 
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
@@ -36,19 +37,21 @@ function ToolReport({ tool, checks, states, pins }) {
         <div class="progress-fill" style={`width:${checks.length ? (100 * done) / checks.length : 0}%`} />
       </div>
       <table class="report-table">
-        {groups.map((g) => {
-          const gDone = g.checks.filter((c) => isDone(states[c.id])).length;
-          const gFlag = g.checks.filter((c) => states[c.id]?.reminder).length;
-          return (
-            <tr>
-              <td>{titles[g.id] || g.id}</td>
-              <td class="num">
-                {gDone}/{g.checks.length}
-              </td>
-              <td class="num">{gFlag ? `🚩${gFlag}` : ''}</td>
-            </tr>
-          );
-        })}
+        <tbody>
+          {groups.map((g) => {
+            const gDone = g.checks.filter((c) => isDone(states[c.id])).length;
+            const gFlag = g.checks.filter((c) => states[c.id]?.reminder).length;
+            return (
+              <tr>
+                <td>{titles[g.id] || g.id}</td>
+                <td class="num">
+                  {gDone}/{g.checks.length}
+                </td>
+                <td class="num">{gFlag ? `🚩${gFlag}` : ''}</td>
+              </tr>
+            );
+          })}
+        </tbody>
       </table>
       {attention.length > 0 && (
         <>
@@ -72,8 +75,24 @@ function ToolReport({ tool, checks, states, pins }) {
   );
 }
 
-export function Report({ project, checks, states, skipped, pins }) {
+export function Report({ project, checks, states, skipped, pins, auth, onSynced }) {
   const [exportError, setExportError] = useState(null);
+  const [syncMsg, setSyncMsg] = useState(null);
+
+  // Sync with the linked Door43 repo (pull + merge + push); first sync
+  // creates/links a repo under the signed-in account
+  async function sync() {
+    setSyncMsg('Syncing…');
+    try {
+      const result = await syncProject(project.id, auth, {
+        promptRepoName: (dflt) => prompt('Door43 repository name for this project:', dflt),
+      });
+      setSyncMsg(describeSyncResult(result) || null);
+      if (!result.cancelled) await onSynced?.();
+    } catch (err) {
+      setSyncMsg(`⚠ ${err.message || err}`);
+    }
+  }
 
   async function download() {
     const md = await buildReportMarkdown(project, checks, states, skipped, pins);
@@ -107,6 +126,17 @@ export function Report({ project, checks, states, skipped, pins }) {
       <button class="secondary" style="width:100%;margin-bottom:12px" onClick={downloadBurrito}>
         🌯 Export tC4 project (Scripture Burrito .zip)
       </button>
+      {auth && (
+        <button
+          class="secondary"
+          style="width:100%;margin-bottom:12px"
+          onClick={sync}
+          disabled={syncMsg === 'Syncing…'}
+        >
+          ⇅ Sync with Door43{project.dcs ? ` (${project.dcs.owner}/${project.dcs.repo})` : ''}
+        </button>
+      )}
+      {syncMsg && <p class={syncMsg.startsWith('⚠') ? 'error' : 'muted'}>{syncMsg}</p>}
       {exportError && <p class="error">Export failed: {exportError}</p>}
       {(skipped.tn > 0 || skipped.tw > 0) && (
         <p class="muted">

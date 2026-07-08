@@ -4,9 +4,9 @@
     {
       "name": "tcore-pwa",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "cwd": "C:/Users/benja/Documents/GitHub/tcc-ge-dcs/tcorePSA",
-      "port": 5173
+      "runtimeArgs": ["run", "dev", "--", "--port", "5199", "--strictPort"],
+      "cwd": "C:/Users/benja/Documents/GitHub/tcc-ge-dcs/tcorePSA/.claude/worktrees/offline-sync-devices-7a2dee",
+      "port": 5199
     }
   ]
 }

@@ -11,11 +11,15 @@ import {
   saveCheckStates,
 } from '../lib/store';
 import { importBurrito, seedStatesFromDecisions } from '../lib/tc4';
+import { syncProject, fetchProjectFromDcs, listMyRepos, describeSyncResult } from '../lib/sync';
 
-export function Home({ onOpen }) {
+export function Home({ onOpen, auth }) {
   const [projects, setProjects] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [syncStatus, setSyncStatus] = useState({}); // projectId -> message
+  const [repoRef, setRepoRef] = useState('');
+  const [myRepos, setMyRepos] = useState(null);
 
   async function refresh() {
     const ids = await listProjects();
@@ -44,9 +48,10 @@ export function Home({ onOpen }) {
   }
 
   // A tC4 Scripture Burrito project zip: one PWA project per book, check
-  // states seeded from the checking/ decision sidecars
-  async function addBurrito(file) {
-    const imported = importBurrito(new Uint8Array(await file.arrayBuffer()));
+  // states seeded from the checking/ decision sidecars. `dcs` (from an
+  // online import) links every book project to its Door43 repo for syncing.
+  async function addBurrito(zipBytes, sourceName, dcs = null) {
+    const imported = importBurrito(zipBytes);
     const importId = `imp-${Date.now()}`;
     await saveBurrito(importId, {
       metadata: imported.metadata,
@@ -57,7 +62,7 @@ export function Home({ onOpen }) {
     const projectName =
       imported.metadata?.identification?.name?.en ||
       imported.metadata?.identification?.abbreviation?.en ||
-      file.name;
+      sourceName;
     for (const { book, usfmText } of imported.books) {
       const parsed = parseUsfm(usfmText);
       const project = {
@@ -67,6 +72,7 @@ export function Home({ onOpen }) {
         usfmText,
         createdAt: new Date().toISOString(),
         tc4: { importId, book },
+        ...(dcs ? { dcs } : {}),
       };
       await saveProject(project);
       const seeded = seedStatesFromDecisions(imported.decisions[book] || {});
@@ -75,12 +81,55 @@ export function Home({ onOpen }) {
     await refresh();
   }
 
+  // Pull a Door43 repo down as a new project (or set of book projects),
+  // stamping the dcs link on each so it syncs back to that repo.
+  async function importRepo(ref) {
+    setError(null);
+    setBusy(true);
+    try {
+      const fetched = await fetchProjectFromDcs(ref, auth);
+      await addBurrito(fetched.zip, fetched.name, fetched.dcs);
+      setRepoRef('');
+      setMyRepos(null);
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function showMyRepos() {
+    setError(null);
+    setBusy(true);
+    try {
+      setMyRepos(await listMyRepos(auth));
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sync(projectId) {
+    setSyncStatus((s) => ({ ...s, [projectId]: 'Syncing…' }));
+    try {
+      const result = await syncProject(projectId, auth, {
+        promptRepoName: (dflt) => prompt('Door43 repository name for this project:', dflt),
+      });
+      setSyncStatus((s) => ({ ...s, [projectId]: describeSyncResult(result) }));
+      await refresh();
+    } catch (err) {
+      setSyncStatus((s) => ({ ...s, [projectId]: `⚠ ${err.message || err}` }));
+    }
+  }
+
   async function onFile(e) {
     setError(null);
     setBusy(true);
     try {
       for (const file of e.target.files) {
-        if (/\.zip$/i.test(file.name)) await addBurrito(file);
+        if (/\.zip$/i.test(file.name))
+          await addBurrito(new Uint8Array(await file.arrayBuffer()), file.name);
         else await addProject(await file.text(), file.name);
       }
     } catch (err) {
@@ -139,6 +188,51 @@ export function Home({ onOpen }) {
             {busy ? 'Loading…' : 'Sample: Ruth (OT)'}
           </button>
         </div>
+        {auth && (
+          <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+            <p class="muted" style="margin:0 0 8px">
+              …or import a project you’ve synced to Door43:
+            </p>
+            <div class="row">
+              <input
+                type="text"
+                class="grow"
+                placeholder="owner/repo or Door43 URL"
+                value={repoRef}
+                onInput={(e) => setRepoRef(e.target.value)}
+                autocapitalize="off"
+              />
+              <button
+                class="secondary"
+                onClick={() => importRepo(repoRef)}
+                disabled={busy || !repoRef.trim()}
+              >
+                Import
+              </button>
+              <button class="secondary" onClick={showMyRepos} disabled={busy}>
+                My repos
+              </button>
+            </div>
+            {myRepos && !myRepos.length && (
+              <p class="muted">No repos under @{auth.username} yet.</p>
+            )}
+            {myRepos?.map((r) => (
+              <div class="row" style="align-items:center;margin-top:6px" key={r.full_name}>
+                <span class="grow" style="overflow:hidden;text-overflow:ellipsis;font-size:0.9rem">
+                  {r.full_name}
+                </span>
+                <button
+                  class="secondary"
+                  style="padding:6px 10px"
+                  onClick={() => importRepo(r.full_name)}
+                  disabled={busy}
+                >
+                  Import
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {error && <p class="error">{error}</p>}
       </div>
 
@@ -150,8 +244,28 @@ export function Home({ onOpen }) {
             <div class="item-title">{p.bookName || BOOKS[p.bookCode] || p.bookCode}</div>
             <div class="item-sub">
               {p.name} · {Object.keys(p.chapters).length} chapters
+              {p.dcs && ` · ⇅ ${p.dcs.owner}/${p.dcs.repo}`}
             </div>
+            {syncStatus[p.id] && (
+              <div class="item-sub" style="color:var(--ocean)">
+                {syncStatus[p.id]}
+              </div>
+            )}
           </div>
+          {auth && (
+            <button
+              class="secondary"
+              style="padding:6px 10px"
+              title="Sync with Door43"
+              disabled={syncStatus[p.id] === 'Syncing…'}
+              onClick={(e) => {
+                e.stopPropagation();
+                sync(p.id);
+              }}
+            >
+              ⇅
+            </button>
+          )}
           <button
             class="secondary"
             style="padding:6px 10px"

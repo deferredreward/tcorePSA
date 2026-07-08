@@ -51,6 +51,75 @@ Spec feedback owed to the tC4 team:
 3. §5.2's quoteString-mismatch guidance doesn't say what a writer does with its own new
    decision (see re-anchor decision above).
 
+## Door43 (DCS) sync — `src/lib/dcs.js`, `src/lib/sync.js`
+
+**Status: implemented and tested against a fake DCS (4-scenario integration test in
+`sync.integration.test.js`); the unauthenticated network path verified live in-browser against
+real DCS. Authenticated write (createRepo/commitFiles) and OAuth are NOT yet verified against
+live DCS — no credentials/client-id were available; the request shapes are verified against
+DCS's own swagger (`ChangeFilesOptions`/`ChangeFileOperation`).**
+
+The tC3 "Upload to Door43" story rebuilt for the browser: check offline on one device, sync when
+online, pick up on another. Design decisions:
+
+- **REST, not git.** tC3 shells out to system git (`simple-git`) — impossible in a browser.
+  DCS (Gitea 1.26.4+dcs) sends `Access-Control-Allow-Origin: *` on `/api/v1`, archive downloads,
+  and the OAuth token endpoint (verified by curl 2026-07-08), so the PWA uses pure REST like
+  gateway-edit/tc-create-app: archive-zip download for reads (feeds the existing `importBurrito`,
+  which already tolerates the archive's wrapper dir), batch `POST /repos/{o}/{r}/contents` for
+  writes (one commit, many files; Gitea ≥1.18).
+- **One sync = pull + merge + push.** Download remote archive → merge remote decisions into local
+  states (LWW per §5.2 identity key by `modifiedAt`; `mergeStates`) → remote files become the new
+  round-trip base → `buildBurritoFiles` (extracted from `exportBurrito`) re-merges local states on
+  top → diff by locally-computed **git blob sha** (`crypto.subtle` SHA-1) → commit only changed
+  files. Unlike tC3 (errors on non-fast-forward), concurrent edits on two devices converge.
+  Remote-only files are never deleted. The pull also **adopts the remote source USFM** (this app
+  never edits USFM in place, so remote is authoritative) so a book expanded elsewhere shows up here;
+  `App.loadProjectData` re-derives the checklist after a sync so counts aren't stale.
+- **Auth is optional and dual-path.** The app works fully signed-out (all resource reads stay
+  unauthenticated). Sign-in: (a) OAuth PKCE public client — bible-editor's DCS OAuth design minus
+  the backend; the token endpoint's CORS preflight only allows GET, so the code exchange is a
+  form-encoded *simple request* (no preflight). Needs a one-time OAuth app registration on DCS
+  (public client, redirect = app URL) exposed as `VITE_DCS_CLIENT_ID`; access tokens auto-refresh
+  (`ensureFreshAuth`). (b) Zero-setup fallback: username+password → per-app access token
+  (name qualified per device — `tcore-checks-pwa (<actorId>)` — since Gitea only reveals the secret
+  at creation and can't re-read it; per-device naming means a second device's sign-in doesn't
+  revoke the first's token), or an existing PAT pasted as the password (works with 2FA). Auth
+  lives in IndexedDB (`dcs:auth`); the store is the source of truth — every DCS op funnels through
+  `resolveAuth` (store-sourced + refresh) so a rotated OAuth token is never used stale.
+- **Repo naming**: first sync prompts, default `{book}_checks`, created under the signed-in user.
+  Link stored on the project (`project.dcs = {owner, repo, branch, lastSha, lastSyncAt}`);
+  online imports (`fetchProjectFromDcs`) stamp the link on every book project so they sync back
+  to their source repo. Multiple single-book projects pointed at one repo accumulate books.
+- **The SW must not cache DCS API state** — `vite.config.js` runtimeCaching now excludes
+  `/api/` and `/login/` (a stale branch head would make sync diff against an outdated tree).
+- **UI keeps auth out of the way.** The account lives in a compact "Sign in" / "@username" pill
+  in the header (`Door43Account.jsx`, a collapsed dropdown) — the signed-out Home is just
+  USFM-upload + samples. Importing a Door43 repo appears inside "Add a translation" only when
+  signed in; per-project sync is the `⇅` button on each project row and on the report screen.
+  OAuth is the primary button when `VITE_DCS_CLIENT_ID` is set (mirrors bible-editor's
+  "Sign in with Door43"); the password/token form is the fallback (behind a disclosure when
+  OAuth is available, inline otherwise). `App.jsx` owns `auth` and runs `completeOAuth()` on load.
+
+This section was hardened over a 5-round Codex PR review (PR #8): occurrence-collision guard in
+`seedStatesFromDecisions`, `resolveAuth` (store-sourced, kills OAuth refresh-token staleness),
+per-device PAT names, remote-source adoption on pull, sequenced OAuth-vs-stored auth load, and
+`Report` taking `auth` as a prop so sign-out takes effect live. Regression tests cover each.
+
+Known gaps:
+- **First-sync repo-name collision.** The default repo name is `{book}_checks`, deterministic per
+  book. If a repo of that name already exists under the user, `syncProject` silently adopts it —
+  pulling and merging its decisions into this project. Two independent same-book projects (e.g. two
+  Ruth drafts) both default to `rut_checks` and would cross-contaminate if the prompt's default is
+  accepted. The rename prompt is the only guard. **Needs a confirm-before-reuse UX** ("`rut_checks`
+  already exists — sync into it, or pick a new name?") on first link when the defaulted/entered repo
+  already exists and is non-empty; deliberately left for a product decision rather than a silent code
+  change. (`src/lib/sync.js` `syncProject`, first-sync branch.)
+- No delete propagation (removing a project locally never touches DCS).
+- Race between archive download and commit is unguarded (a concurrent push mid-sync could be
+  overwritten for the current book's files — acceptable while one translator owns a book).
+- `listMyRepos` shows all repos, not just burritos.
+
 ## English gloss of quotes — `src/lib/alignment.js`
 
 **Status: RESOLVED. `src/lib/alignment.js` now delegates to the maintained
