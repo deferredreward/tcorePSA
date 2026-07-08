@@ -141,6 +141,24 @@ button:disabled { opacity: 0.45; }
 }
 .tw-orig { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
 
+/* English (ULT) gloss of the original-language quote */
+.gloss {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--ocean);
+  direction: ltr;
+  margin-top: 6px;
+}
+.gloss-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--inspire);
+  margin-right: 5px;
+}
+
 .note-body { font-size: 0.95rem; line-height: 1.55; overflow-wrap: break-word; }
 .note-body h1, .note-body h2, .note-body h3 { font-size: 1rem; color: var(--ocean); margin: 10px 0 4px; }
 .note-body p { margin: 6px 0; }

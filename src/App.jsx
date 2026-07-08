@@ -4,8 +4,9 @@ import { CheckList, checkProgress } from './components/CheckList';
 import { GroupList } from './components/GroupList';
 import { CheckRunner } from './components/CheckRunner';
 import { Report } from './components/Report';
-import { fetchTnTsv, fetchTwlTsv } from './lib/door43';
+import { fetchTnTsv, fetchTwlTsv, fetchUltUsfm } from './lib/door43';
 import { parseTnChecks, parseTwChecks, groupChecks } from './lib/checks';
+import { parseAlignments } from './lib/alignment';
 import { getVerseText } from './lib/verses';
 import { getProject, getCheckStates, saveCheckState, getBurrito } from './lib/store';
 import { appendDecisionEvent } from './lib/journal';
@@ -19,6 +20,7 @@ export function App() {
   const [skipped, setSkipped] = useState({ tn: 0, tw: 0 });
   const [states, setStates] = useState({});
   const [pins, setPins] = useState(null); // tC4 resource pins (BURRITO-SPEC §5.3)
+  const [alignments, setAlignments] = useState(null); // ULT word alignments for English glosses
   const [loadError, setLoadError] = useState(null);
 
   const groups = useMemo(
@@ -30,6 +32,7 @@ export function App() {
     setRoute({ view: 'project' });
     setProject(null);
     setChecks(null);
+    setAlignments(null);
     setLoadError(null);
     try {
       const p = await getProject(id);
@@ -38,6 +41,11 @@ export function App() {
       // imported tC4 projects check against their pinned resource versions
       const projectPins = p.tc4 ? (await getBurrito(p.tc4.importId))?.pins || null : null;
       setPins(projectPins);
+      // Load the aligned ULT in the background — it powers the English gloss of
+      // each original-language quote, but checks shouldn't wait on it.
+      fetchUltUsfm(p.bookCode)
+        .then((usfmText) => setAlignments(parseAlignments(usfmText)))
+        .catch(() => {});
       const [tnTsv, twlTsv] = await Promise.all([
         fetchTnTsv(p.bookCode, projectPins?.translationNotes),
         fetchTwlTsv(p.bookCode),
@@ -211,6 +219,7 @@ export function App() {
           index={route.index}
           states={states}
           pins={pins}
+          alignments={alignments}
           onSave={onSaveState}
           onNavigate={(index) => setRoute({ ...route, index })}
         />

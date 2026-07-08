@@ -1,4 +1,5 @@
 import { get, set } from 'idb-keyval';
+import { usfmFileNumber } from './books';
 
 const BASE = 'https://git.door43.org/unfoldingWord';
 
@@ -57,5 +58,13 @@ export function fetchTaArticle(slug, pin) {
 }
 
 export function fetchSampleUsfm(fileNum, bookCode) {
+  return fetchCached(`${BASE}/en_ult/raw/branch/master/${fileNum}-${bookCode}.usfm`);
+}
+
+// The aligned en_ULT for a book — its word alignments let us gloss the
+// original-language quotes into English.
+export function fetchUltUsfm(bookCode) {
+  const fileNum = usfmFileNumber(bookCode);
+  if (!fileNum) return Promise.reject(new Error(`Unknown book code: ${bookCode}`));
   return fetchCached(`${BASE}/en_ult/raw/branch/master/${fileNum}-${bookCode}.usfm`);
 }
