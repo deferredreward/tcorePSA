@@ -13,6 +13,7 @@ import {
 import { importBurrito, seedStatesFromDecisions } from '../lib/tc4';
 import { detectProjectFormat, importTc3 } from '../lib/tc3';
 import { syncProject, fetchProjectFromDcs, listMyRepos, describeSyncResult } from '../lib/sync';
+import { upgradeTc3ToBurrito } from '../lib/upgrade';
 
 export function Home({ onOpen, auth }) {
   const [projects, setProjects] = useState([]);
@@ -21,6 +22,7 @@ export function Home({ onOpen, auth }) {
   const [syncStatus, setSyncStatus] = useState({}); // projectId -> message
   const [repoRef, setRepoRef] = useState('');
   const [myRepos, setMyRepos] = useState(null);
+  const [upgradeMenu, setUpgradeMenu] = useState(null); // projectId with its upgrade options open
 
   async function refresh() {
     const ids = await listProjects();
@@ -151,6 +153,37 @@ export function Home({ onOpen, auth }) {
         promptRepoName: (dflt) => prompt('Door43 repository name for this project:', dflt),
       });
       setSyncStatus((s) => ({ ...s, [projectId]: describeSyncResult(result) }));
+      await refresh();
+    } catch (err) {
+      setSyncStatus((s) => ({ ...s, [projectId]: `⚠ ${err.message || err}` }));
+    }
+  }
+
+  // One-way tC3 → Scripture Burrito upgrade (upgrade.js). Reuses the per-project
+  // syncStatus line for feedback; refresh() re-reads the project, now format
+  // 'burrito' (its ⇅ sync button replaces the 🌯 upgrade button).
+  async function upgrade(projectId, mode) {
+    const p = projects.find((x) => x.id === projectId);
+    if (
+      mode === 'in-place' &&
+      p?.dcs &&
+      !confirm(
+        `Rewrite ${p.dcs.owner}/${p.dcs.repo} as a Scripture Burrito? This replaces its translationCore 3 files and cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setUpgradeMenu(null);
+    setSyncStatus((s) => ({ ...s, [projectId]: 'Upgrading…' }));
+    try {
+      const result = await upgradeTc3ToBurrito(projectId, auth, {
+        mode,
+        promptRepoName: (dflt) => prompt('New Door43 repository name:', dflt),
+      });
+      setSyncStatus((s) => ({
+        ...s,
+        [projectId]: result.cancelled ? '' : `✓ Upgraded → ${result.owner}/${result.repo}`,
+      }));
       await refresh();
     } catch (err) {
       setSyncStatus((s) => ({ ...s, [projectId]: `⚠ ${err.message || err}` }));
@@ -288,6 +321,26 @@ export function Home({ onOpen, auth }) {
                 {syncStatus[p.id]}
               </div>
             )}
+            {upgradeMenu === p.id && (
+              <div class="row" style="margin-top:6px" onClick={(e) => e.stopPropagation()}>
+                {p.dcs && (
+                  <button
+                    class="secondary"
+                    style="padding:6px 10px"
+                    onClick={() => upgrade(p.id, 'in-place')}
+                  >
+                    Upgrade repo in place
+                  </button>
+                )}
+                <button
+                  class="secondary"
+                  style="padding:6px 10px"
+                  onClick={() => upgrade(p.id, 'new-repo')}
+                >
+                  Export to new repo
+                </button>
+              </div>
+            )}
           </div>
           {auth && p.format !== 'tc3' && (
             <button
@@ -301,6 +354,19 @@ export function Home({ onOpen, auth }) {
               }}
             >
               ⇅
+            </button>
+          )}
+          {auth && p.format === 'tc3' && (
+            <button
+              class="secondary"
+              style="padding:6px 10px"
+              title="Upgrade to Scripture Burrito"
+              onClick={(e) => {
+                e.stopPropagation();
+                setUpgradeMenu(upgradeMenu === p.id ? null : p.id);
+              }}
+            >
+              🌯
             </button>
           )}
           <button

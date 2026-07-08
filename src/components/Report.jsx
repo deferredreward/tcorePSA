@@ -6,6 +6,7 @@ import { exportBurrito } from '../lib/tc4';
 import { getActorId, getJournal } from '../lib/journal';
 import { getBurrito } from '../lib/store';
 import { syncProject, describeSyncResult } from '../lib/sync';
+import { upgradeTc3ToBurrito } from '../lib/upgrade';
 import { isDone } from './CheckList';
 
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
@@ -78,6 +79,41 @@ function ToolReport({ tool, checks, states, pins }) {
 export function Report({ project, checks, states, skipped, pins, auth, onSynced }) {
   const [exportError, setExportError] = useState(null);
   const [syncMsg, setSyncMsg] = useState(null);
+  const [upgradeMsg, setUpgradeMsg] = useState(null);
+  const [upgrading, setUpgrading] = useState(false);
+
+  // One-way tC3 → Scripture Burrito upgrade (upgrade.js). 'in-place' rewrites
+  // the linked Door43 repo; 'new-repo' pushes to a fresh personal repo. On
+  // success onSynced reloads the project — now format 'burrito', so this
+  // screen re-renders with the normal burrito export/sync controls.
+  async function upgrade(mode) {
+    if (
+      mode === 'in-place' &&
+      !confirm(
+        `Rewrite ${project.dcs.owner}/${project.dcs.repo} as a Scripture Burrito? This replaces its translationCore 3 files and cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setUpgrading(true);
+    setUpgradeMsg('Upgrading…');
+    try {
+      const result = await upgradeTc3ToBurrito(project.id, auth, {
+        mode,
+        promptRepoName: (dflt) => prompt('New Door43 repository name:', dflt),
+      });
+      if (result.cancelled) {
+        setUpgradeMsg(null);
+        return;
+      }
+      setUpgradeMsg(`✓ Upgraded → ${result.owner}/${result.repo}`);
+      await onSynced?.();
+    } catch (err) {
+      setUpgradeMsg(`⚠ ${err.message || err}`);
+    } finally {
+      setUpgrading(false);
+    }
+  }
 
   // Sync with the linked Door43 repo (pull + merge + push); first sync
   // creates/links a repo under the signed-in account
@@ -129,10 +165,31 @@ export function Report({ project, checks, states, skipped, pins, auth, onSynced 
         ⬇ Download report (.md)
       </button>
       {project.format === 'tc3' ? (
-        <p class="muted" style="margin:0 0 12px">
-          🌯 Converting this translationCore 3 project to a Scripture Burrito is coming via the
-          upgrade flow.
-        </p>
+        <div style="margin-bottom:12px">
+          <p class="muted" style="margin:0 0 8px">
+            🌯 This is a translationCore 3 project. Upgrade it to a Scripture Burrito (one-way — no
+            going back):
+          </p>
+          {auth ? (
+            <div class="row">
+              {project.dcs && (
+                <button class="secondary grow" disabled={upgrading} onClick={() => upgrade('in-place')}>
+                  Upgrade this repo in place
+                </button>
+              )}
+              <button class="secondary grow" disabled={upgrading} onClick={() => upgrade('new-repo')}>
+                Export to a new repo
+              </button>
+            </div>
+          ) : (
+            <p class="muted" style="margin:0">
+              Sign in to Door43 (top-right) to upgrade.
+            </p>
+          )}
+          {upgradeMsg && (
+            <p class={upgradeMsg.startsWith('⚠') ? 'error' : 'muted'}>{upgradeMsg}</p>
+          )}
+        </div>
       ) : (
         <button class="secondary" style="width:100%;margin-bottom:12px" onClick={downloadBurrito}>
           🌯 Export tC4 project (Scripture Burrito .zip)

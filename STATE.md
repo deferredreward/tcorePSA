@@ -100,22 +100,102 @@ Known gaps / follow-ups (spun off as suggested tasks):
 
 - **tC3 sync-back write pipeline** — write decisions back to the *same* repo in tC3 format
   (append timestamped checkData files), fully separate from burrito sync.
-- **tC3→Burrito upgrade** — one-way convert to burrito, either in place or to a new personal
-  repo (`dcs.createRepo` + `commitFiles`); no downgrade. Would be the first real exercise of the
-  authenticated DCS write path (still un-live-verified — see the DCS section).
+- **tC3→Burrito upgrade** — DONE, see the "tC3→Burrito upgrade" section below (`src/lib/upgrade.js`).
 - **Older tC3 projects without `checkId`** key only by group+quote+occurrence; those won't
   attach until re-anchored against the current resource — that fuzzy matcher is not built (the
   modern checkId path is what's verified).
 - **tW/tQ:** tW imports, but its checks fetch en_twl at master (existing gap below), so a tW
   checkId may not match a pinned list; translationQuestions is not modeled and is skipped.
 
+## tC3→Burrito upgrade — `src/lib/upgrade.js`
+
+**Status: built and unit-tested (`upgradeTc3ToBurrito`, 8 vitest cases in `src/lib/upgrade.test.js`,
+in `npm test`). The one-way bridge from an imported tC3 project (`format: 'tc3'`) to a native
+Scripture Burrito, in two modes. The DCS *write* it performs (createRepo/commitFiles) is still NOT
+verified against live Door43 — same outstanding gap as the sync section; this feature is its first
+real exerciser, but it needs a signed-in test account to close. See "Live verification owed" below.**
+
+The only place the app's two otherwise-isolated pipelines (tC3 read in `tc3.js`, burrito in
+`tc4.js`/`sync.js`) deliberately meet. Runs only on explicit user action.
+
+Two modes:
+- **Upgrade in place** — rewrite the SAME linked Door43 repo as a burrito. The tC3 marker files are
+  deleted (see below), burrito files committed, and the project re-pointed at that repo with
+  `format: 'burrito'`. The repo stops being tC3; one-way.
+- **Export to a new repo** — `dcs.createRepo` a fresh personal repo under the signed-in user, push
+  the burrito there (empty repo ⇒ all `create`, branch omitted so the first commit makes the default
+  branch), and leave the original tC3 repo untouched. The project is re-linked to the new repo with
+  `format: 'burrito'`.
+
+Design decisions:
+
+- **The conversion is `buildBurritoFiles` (tc4.js) over the tC3 project's `usfmText` + the seeded
+  PWA states** — no new burrito-generation code. A **minimal** burrito context is passed (not the
+  tC3 files), so the output is a clean fresh burrito, not layered on tC3 files.
+- **The tC3 resource pins are carried into `resources.json`.** This is the one place the "burrito
+  context" is non-empty: `resourcesFromTc3(project.pins)` builds a §5.3 `resources.json` from the
+  tC3 manifest's per-tool pins (e.g. en_tn `v88`). WHY it's load-bearing: on reload / re-import the
+  app reads a burrito's pins from `resources.json` (not the per-decision `resource` field) and
+  fetches its check lists at those versions. A default fresh burrito is en_*/master; if the project
+  was checked at v88 the check ids can differ at master and the just-migrated decisions would
+  **silently fail to re-attach**. Carrying the pins keeps "same pins ⇒ same check ids ⇒ decisions
+  line up". OL/lexicon stay unfoldingWord/master (tC3 pins neither; informational only).
+- **The tC3 `checkData` is intentionally DROPPED, and nothing is lost.** Every decision in
+  `.apps/translationCore/checkData/…` was seeded into the PWA states on import
+  (`seedStatesFromDecisions`), and `buildBurritoFiles` re-emits those as the burrito's
+  `checking/<tool>/<BOOK>.json` decision sidecars — the burrito's native decision carrier. The
+  upgrade test asserts both OBA decisions ("go whup", the aside) survive into the sidecar with
+  `status: valid` and the v88 pin. So the drop is a format change, not a data loss.
+- **In-place delete is positive-identification only.** `isTc3Artifact` removes exactly the tC3
+  layout (`manifest.json`, `.apps/**`, root-level `*.usfm`, the chapter-split `<book>/N.json`) —
+  never a catch-all "delete everything else" — so a user's `LICENSE`/`README` survive, and anything
+  missed is harmless because `detectProjectFormat` prefers `metadata.json ⇒ burrito`. Existing files
+  that a burrito path also writes (e.g. `.gitignore`) are `update` (with the tree's blob sha), not
+  `create`. In-place refuses if the linked repo isn't owned by the signed-in user (can only
+  create/rewrite under yourself).
+- **`format` transition.** On success the project is saved with `format: 'burrito'`,
+  `tc4: { importId, book }` (so `App.loadProjectData` reads pins/metadata from the stored burrito
+  context, exactly like a natively-imported burrito), the new `dcs` link, and the now-orphaned
+  tC3 `project.pins` removed. From then on it uses the burrito sync/export path (the `format==='tc3'`
+  guards in `syncProject`/Home/Report no longer fire).
+- **UI.** Home shows a `🌯` button on tC3 project rows (signed in) that expands to the two modes
+  inline; Report shows two buttons ("Upgrade this repo in place" / "Export to a new repo",
+  in-place only when a repo is linked). Both funnel through `upgradeTc3ToBurrito`; in-place asks a
+  `confirm()` first (irreversible repo rewrite). Feedback reuses the existing per-project sync-status
+  line (Home) / a message line (Report); on success the project reloads and its burrito controls
+  replace the upgrade affordance.
+
+Live verification — DONE (2026-07-08, against real git.door43.org as `@benjamin-test`):
+- Both modes exercised end-to-end with a throwaway harness (`scripts/live-dcs-upgrade-check.mjs`,
+  not committed): **new-repo** = `dcs.createRepo` + first batch commit on the empty repo (all
+  `create`, no branch); **in-place** = seed a tC3-shaped repo, then a create/update/delete batch
+  commit. Each verified by re-downloading the archive and re-importing: the tree re-imports as a
+  burrito, the tC3 v88 pins are carried, and both OBA decisions ("go whup" / the aside) survive and
+  re-attach. In-place confirmed the tC3 markers (`manifest.json`, `.apps/**`, `oba.usfm`, `oba/1.json`)
+  were deleted, `LICENSE.md` was preserved, and an existing `.gitignore` was `update`d (not `create`d).
+  Both test repos were deleted afterward. 15/15 checks passed.
+- **This was the first live exercise of the authenticated DCS write path and it surfaced a real bug:**
+  `POST /user/repos` (`dcs.createRepo`) requires the **`write:user`** scope, but `login()` was minting
+  per-app tokens with only `['read:user', 'write:repository']` — so first-sync repo creation (and this
+  upgrade's new-repo mode) would have 403'd "required=[write:user]" for every password-flow user. Fixed:
+  `login()` now requests `['read:user', 'write:user', 'write:repository']` (see the DCS section).
+- **Still owed:** the OAuth PKCE flow itself is not live-tested (no registered client), and `login()`'s
+  own token-*creation* call wasn't exercised (the harness used a hand-made PAT). The scope requirement
+  is proven; the token-mint path that now requests it is not yet run live.
+
 ## Door43 (DCS) sync — `src/lib/dcs.js`, `src/lib/sync.js`
 
 **Status: implemented and tested against a fake DCS (4-scenario integration test in
 `sync.integration.test.js`); the unauthenticated network path verified live in-browser against
-real DCS. Authenticated write (createRepo/commitFiles) and OAuth are NOT yet verified against
-live DCS — no credentials/client-id were available; the request shapes are verified against
-DCS's own swagger (`ChangeFilesOptions`/`ChangeFileOperation`).**
+real DCS. The authenticated write primitives (`createRepo` + `commitFiles` batch create/update/delete,
+`getBranchSha`/`getTree`/`downloadArchive`) are now VERIFIED live (2026-07-08, PAT auth, via the
+tC3→burrito upgrade harness — see that section). This turned up a scope bug: `POST /user/repos`
+needs `write:user`, which `login()` was not requesting — now fixed to
+`['read:user', 'write:user', 'write:repository']` (line ~169). Still NOT live-verified: the OAuth
+PKCE flow (no registered client) and `login()`'s own token-creation call (the harness used a
+hand-made PAT). NOTE for OAuth: the DCS OAuth app registration must grant the same scopes
+(incl. `write:user`) — `startOAuth` sends no `scope` param, so OAuth token scopes come from the
+registration, not the code.**
 
 The tC3 "Upload to Door43" story rebuilt for the browser: check offline on one device, sync when
 online, pick up on another. Design decisions:
