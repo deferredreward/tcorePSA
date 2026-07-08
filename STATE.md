@@ -98,8 +98,8 @@ export/sync guarded + hidden for tC3. Each fix has a regression test.
 
 Known gaps / follow-ups (spun off as suggested tasks):
 
-- **tC3 sync-back write pipeline** — write decisions back to the *same* repo in tC3 format
-  (append timestamped checkData files), fully separate from burrito sync.
+- **tC3 sync-back write pipeline** — DONE (see "tC3 sync (Pipeline A write)" below): decisions
+  write back to the *same* repo in tC3 format, fully separate from burrito sync.
 - **tC3→Burrito upgrade** — one-way convert to burrito, either in place or to a new personal
   repo (`dcs.createRepo` + `commitFiles`); no downgrade. Would be the first real exercise of the
   authenticated DCS write path (still un-live-verified — see the DCS section).
@@ -108,6 +108,66 @@ Known gaps / follow-ups (spun off as suggested tasks):
   modern checkId path is what's verified).
 - **tW/tQ:** tW imports, but its checks fetch en_twl at master (existing gap below), so a tW
   checkId may not match a pinned list; translationQuestions is not modeled and is skipped.
+
+## tC3 sync (Pipeline A write) — `src/lib/tc3CheckData.js`, `src/lib/tc3Sync.js`
+
+**Status: the write half of the two-isolated-pipelines design. The pure file builder
+(`buildTc3CheckDataFiles`) is round-trip tested in node — 16 cases, `npm run test:tc3`, mirroring
+`test:tc4`: build a decision → assert path + record shape → re-import through the tC3 READ path
+(`importTc3`) and assert it seeds back to the same check id. The orchestrator (`syncTc3Project`,
+pull→merge→push over DCS) is NOT live-verified — same un-verified authenticated DCS write path as
+burrito sync (no credentials available); its request shapes reuse `src/lib/dcs.js` verbatim.**
+
+When a user edits decisions on a `format: 'tc3'` project, the `⇅` button writes them back to the
+*same* Door43 repo in tC3's native `.apps/translationCore/checkData/` layout — never a burrito.
+Routed entirely on `project.format`: `Home.jsx`'s `sync()` calls `syncTc3Project` for tC3 and the
+burrito `syncProject` otherwise; the two never share a write path (`syncProject` still throws for
+tC3, `syncTc3Project` throws for non-tC3 — symmetric guards).
+
+Design decisions:
+
+- **Two files by the tc4.js/sync.js precedent.** `tc3CheckData.js` is the pure, node-safe builder
+  (imports only `fflate` + `quoteToArray`/`normalizeQuote` from tc4.js) so the node test drives it
+  directly; `tc3Sync.js` is the network/store shell (dcs, store, sync, usfmParse). `sync.js` and
+  `store.js` use extensionless, browser-only imports node can't load — which is exactly why
+  `test-tc4.mjs` imports only the pure `tc4.js`, never `sync.js`. Same split here.
+- **Append-only write model.** Each changed decision writes a NEW timestamped file per changed
+  category (`selections|comments|reminders|invalidated`) at
+  `checkData/<category>/<book-lowercase>/<ch>/<v>/<ISO>.json`; filenames encode `modifiedTimestamp`
+  with colons→underscores (`2026-07-08T19_29_48.018Z.json`), JSON compact — matching tC3's actual
+  output (verified against the read fixture in `tc3.test.js`). Existing history is never rewritten
+  or deleted. We never emit `<book>.usfm`, the chapter JSON, or the regenerable
+  `.apps/translationCore/index/` groupData cache (tC desktop rebuilds it on open).
+- **`contextId` is reconstructed from the pinned check definitions** (like tc4's `recordFromCheck`),
+  because `seedStatesFromDecisions` drops the imported `contextId`. Faithful because the project is
+  pinned to the same resource version it was checked against, so `checkId`/`quote`/`occurrence`/
+  `reference` match what tC3 first wrote. tN quote → `[{word,occurrence}]` array, tW quote → the
+  OrigWords string (mirrors tc4). `glQuote`/`gatewayLanguageQuote` are display caches we don't
+  recompute — emitted empty; untouched remote records keep their originals (never rewritten).
+- **Append-only diff = pull the remote, compare per-category against it.** `syncTc3Project` always
+  downloads the archive and `importTc3`s it to get `remoteStates`, merges those into local (LWW by
+  `modifiedAt`, reusing `mergeStates`/`seedStatesFromDecisions` from the burrito path), then emits a
+  file only where the merged local decision differs from the remote's, per category. This is the
+  tC3 analog of sync.js's "commit only changed files" and is what makes re-syncs idempotent — a
+  decision already on the remote re-imports identically, so nothing is re-appended. The final git
+  blob-sha diff (reused from sync.js) is a secondary guard; tC3 files are almost always fresh
+  `create`s since their filenames are timestamped.
+- **Filename-collision guard.** Two checks in the same verse+category sharing a `modifiedAt` would
+  collide on filename; the builder bumps the millisecond (keeping a valid ISO stamp) so each gets a
+  distinct file. Rare, but two seeded decisions can share an import timestamp.
+- **Requires an existing `project.dcs` link.** tC3 sync writes decisions *into* the source repo
+  (it never emits the manifest/USFM), so a tC3 project imported from a local `.zip` (no repo) throws
+  a clear error rather than creating a malformed repo. Deliberately narrower than burrito sync's
+  first-sync create-repo path.
+
+Known gaps / follow-ups:
+- **Orchestrator un-live-verified** (same as burrito sync): the pull→merge→push flow and its DCS
+  writes have not run against live authenticated DCS. The pure builder + round-trip are verified.
+- **Decisions on checks absent from the current pinned list are not written** (the builder iterates
+  the fetched checks and skips orphan states) — the same "older tC3 without `checkId`" re-anchor
+  gap noted in the read section.
+- **`Report.jsx` still hides the sync control for tC3** (only `Home.jsx` was wired per this task's
+  scope); enabling it there is a trivial follow-up now that `syncTc3Project` exists.
 
 ## Door43 (DCS) sync — `src/lib/dcs.js`, `src/lib/sync.js`
 
