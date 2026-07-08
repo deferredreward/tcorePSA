@@ -1,5 +1,17 @@
 # tC4 Project Format Specification (BURRITO-SPEC)
 
+> **Note for this repo (not part of the spec).** This is a verbatim snapshot of the spec
+> `src/lib/tc4.js` implements, vendored from the tC4-pankosmia package. Its cross-references
+> point at that package's layout, not this repo. In this checkout:
+> - **Conformance harness:** run `npm run test:tc4` (`scripts/test-tc4.mjs`, 41 checks) — *not*
+>   the `npm run validate` / `sample-burrito-validation/` referenced below.
+> - **Sample project:** `test/fixtures/sample-burrito/` (the spec's `../sample-burrito/`).
+> - **`HANDOFF.md` and the full package** (direction/architecture docs, `boon` validators) live
+>   outside this public repo at `../tc4-pankosmia-package/` (see [CLAUDE.md](../CLAUDE.md)).
+>
+> Check-count drift (spec text says 27, this repo's harness runs 41) is expected — the in-tree
+> harness is a superset tailored to the PWA's import/export paths.
+
 **Version:** 1.1-draft · 2026-07-07 (1.0-draft was 2026-07-05; this revision incorporates the accepted findings of the 2026-07-06 independent adversarial review: §8.4 derived-file merge rule, §4.1/§5.2 verse-span semantics, §5.2 triage `status`, §7 Stage-1/Stage-2 conformance split — harness extended to 27 checks in the same change, per §9)
 **Status:** Normative for Phase 1; §8 (journal) is a Phase 2 design draft.
 **Audience:** implementers (human or AI). Read `HANDOFF.md` first if you are new.
