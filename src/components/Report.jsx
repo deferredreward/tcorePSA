@@ -103,6 +103,11 @@ export function Report({ project, checks, states, skipped, pins, auth, onSynced 
   // checking sidecars + §8-draft journal), importable by translationCore 4
   async function downloadBurrito() {
     setExportError(null);
+    // tC3 imports must not go through the burrito export: buildBurritoFiles has
+    // no tC3 import context, so it would emit a fresh master-pinned burrito that
+    // drops the project's tc3 resource pins. Converting tC3 -> burrito is the
+    // (separate) upgrade flow. Guard defensively; the button is also hidden below.
+    if (project.format === 'tc3') return;
     try {
       const burrito = project.tc4 ? await getBurrito(project.tc4.importId) : null;
       const zip = exportBurrito({
@@ -123,9 +128,16 @@ export function Report({ project, checks, states, skipped, pins, auth, onSynced 
       <button class="primary" style="width:100%;margin-bottom:12px" onClick={download}>
         ⬇ Download report (.md)
       </button>
-      <button class="secondary" style="width:100%;margin-bottom:12px" onClick={downloadBurrito}>
-        🌯 Export tC4 project (Scripture Burrito .zip)
-      </button>
+      {project.format === 'tc3' ? (
+        <p class="muted" style="margin:0 0 12px">
+          🌯 Converting this translationCore 3 project to a Scripture Burrito is coming via the
+          upgrade flow.
+        </p>
+      ) : (
+        <button class="secondary" style="width:100%;margin-bottom:12px" onClick={downloadBurrito}>
+          🌯 Export tC4 project (Scripture Burrito .zip)
+        </button>
+      )}
       {auth && (
         <button
           class="secondary"

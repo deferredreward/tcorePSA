@@ -203,8 +203,9 @@ export function Home({ onOpen, auth }) {
         <h2>Add a translation</h2>
         <p class="muted">
           Upload a USFM file of your translation — a whole book or just the portion you've
-          translated — or a translationCore project (v3 folder or v4 Scripture Burrito .zip), or
-          try a sample (Titus, unfoldingWord ULT).
+          translated — or a translationCore project .zip (v3, or v4 Scripture Burrito), or
+          try a sample (Titus, unfoldingWord ULT). A tC3 project on Door43 imports directly
+          from its repo below.
         </p>
         <div class="row">
           <label class="primary">
