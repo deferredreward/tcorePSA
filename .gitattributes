@@ -1,0 +1,3 @@
+# Scripture Burrito fixtures carry recorded md5 checksums in metadata.json.
+# Pin them to LF so the bytes (and checksums) are identical on every platform.
+test/fixtures/** text eol=lf
