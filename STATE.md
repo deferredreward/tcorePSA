@@ -54,7 +54,7 @@ Spec feedback owed to the tC4 team:
 ## tC3 (translationCore 3) backward-compat import — `src/lib/tc3.js`
 
 **Status: working and verified end-to-end against a real repo
-(`git.door43.org/deferredreward/en_rnb_oba_book`, `tc_version 8`). Read-only import; 8 vitest
+(`git.door43.org/deferredreward/en_rnb_oba_book`, `tc_version 8`). Read-only import; 10 vitest
 cases in `src/lib/tc3.test.js` (in `npm test`). Live archive import + in-app render confirmed:
 the repo's two done tN checks (OBA 1:1 `figs-abstractnouns` → "go whup"; 1:7 `figs-aside` →
 "And you Edom folks ain't got the sense to see it comin'") seed to `tn-1:1-jd1r` / `tn-1:7-rc1i`
@@ -73,16 +73,28 @@ Design decisions:
   (`.apps/translationCore/checkData/{selections,comments,reminders,invalidated}/<book>/<ch>/<v>/<ISO>.json`);
   newest-per-category wins, then categories merge into one record per check. tC3's `text`
   (→`comments`) and `enabled` (→`reminders`) field names are bridged in tc3.js.
-- **Resource pins come from the manifest** (`tc_<gl>_check_version_<tool>`, e.g.
-  `"v88_unfoldingWord"` → `v88`) so checks fetch the exact release the project was checked
-  against and checkIds match 1:1. This is the tC3 analog of BURRITO-SPEC §5.3 — and unlike the
-  burrito path it *does* carry a tW-list version.
-- **`format: 'tc3'` on the project** routes the sync button to the tC3 pipeline; until that
-  pipeline lands, `syncProject` throws a clear "coming soon" guard so a burrito is never pushed
-  into a tC3 repo. Pins ride on `project.pins` (App.loadProjectData reads it), not a burrito
-  import context — so nothing tC3 touches the tc4 store.
+- **Resource pins come from the manifest, resolved _per tool_** —
+  `toolsSelectedGLs[tool]` / `toolsSelectedOwners[tool]` / `tc_<gl>_check_version_<tool>` (e.g.
+  `"v88_unfoldingWord"` → `v88`) — so checks fetch the exact release checked against and checkIds
+  match 1:1, and a project checking tN and tW against **different gateway languages/owners**
+  (a non-en org, e.g. `es-419`/`Door43-Catalog`) pins each correctly. translationAcademy follows
+  the tN gateway (same owner+GL, no version — mirroring tC's own MyProjectsActions). This is the
+  tC3 analog of BURRITO-SPEC §5.3.
+- **`verseEdits` is deliberately excluded** (explicit `IGNORED_CATEGORIES`): it's a target-text
+  edit-history audit trail, not a checking decision — the edited text is already in `<book>.usfm`
+  (imported), and tC itself never counts an edit as a completed check. Importing it would fabricate
+  "done" checks.
+- **`format: 'tc3'` on the project** keeps tC3 fully out of the burrito write path: `syncProject`
+  throws a clear "coming soon" guard, and the burrito **export** button + Door43 **sync** controls
+  are hidden for tC3 in both Home and Report (so no live-looking control emits a wrong/master-pinned
+  burrito). Pins ride on `project.pins` (App.loadProjectData reads it), not a burrito import
+  context — so nothing tC3 touches the tc4 store.
 - **Detection** (`detectProjectFormat`): a scripture-burrito `metadata.json` ⇒ burrito; else a
   tc-initialized `manifest.json` ⇒ tc3. Tolerates the DCS archive's wrapper directory.
+
+Hardened over a 5-round Codex PR review (PR #10): per-tool resource pins (not both from tN),
+a translationAcademy pin (the UI reads it), explicit `verseEdits` exclusion, and burrito
+export/sync guarded + hidden for tC3. Each fix has a regression test.
 
 Known gaps / follow-ups (spun off as suggested tasks):
 
