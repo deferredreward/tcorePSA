@@ -9,15 +9,15 @@ import { isDone } from './CheckList';
 
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
 
-function ToolReport({ tool, checks, states }) {
+function ToolReport({ tool, checks, states, pins }) {
   const groups = groupChecks(checks);
   const [titles, setTitles] = useState({});
 
   useEffect(() => {
     let live = true;
-    Promise.all(groups.map(async (g) => [g.id, await groupTitle(tool, g.id)])).then(
-      (entries) => live && setTitles(Object.fromEntries(entries)),
-    );
+    Promise.all(
+      groups.map(async (g) => [g.id, await groupTitle(tool, g.id, pins?.translationAcademy)]),
+    ).then((entries) => live && setTitles(Object.fromEntries(entries)));
     return () => {
       live = false;
     };
@@ -72,11 +72,11 @@ function ToolReport({ tool, checks, states }) {
   );
 }
 
-export function Report({ project, checks, states, skipped }) {
+export function Report({ project, checks, states, skipped, pins }) {
   const [exportError, setExportError] = useState(null);
 
   async function download() {
-    const md = await buildReportMarkdown(project, checks, states, skipped);
+    const md = await buildReportMarkdown(project, checks, states, skipped, pins);
     downloadText(`${project.bookCode}-check-report.md`, md);
   }
 
@@ -114,8 +114,8 @@ export function Report({ project, checks, states, skipped }) {
           counted.
         </p>
       )}
-      <ToolReport tool="tn" checks={checks.tn} states={states} />
-      <ToolReport tool="tw" checks={checks.tw} states={states} />
+      <ToolReport tool="tn" checks={checks.tn} states={states} pins={pins} />
+      <ToolReport tool="tw" checks={checks.tw} states={states} pins={pins} />
     </div>
   );
 }

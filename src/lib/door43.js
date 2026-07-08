@@ -48,8 +48,8 @@ export function fetchTwArticle(rcLink, pin) {
 }
 
 // translationAcademy article for a tN check type, e.g. figs-metaphor
-export function fetchTaTitle(slug) {
-  return fetchCached(`${BASE}/en_ta/raw/branch/master/translate/${slug}/title.md`);
+export function fetchTaTitle(slug, pin) {
+  return fetchCached(pinnedUrl(pin, 'en_ta', `translate/${slug}/title.md`));
 }
 
 export function fetchTaArticle(slug, pin) {

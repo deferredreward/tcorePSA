@@ -74,7 +74,7 @@ export function CheckRunner({ project, tool, checks, index, states, pins, onSave
   useEffect(() => {
     let live = true;
     setArticle(null);
-    groupTitle(tool, check.groupId).then((t) => live && setTitle(t));
+    groupTitle(tool, check.groupId, pins?.translationAcademy).then((t) => live && setTitle(t));
     const load =
       tool === 'tw'
         ? fetchTwArticle(check.link, pins?.translationWords)

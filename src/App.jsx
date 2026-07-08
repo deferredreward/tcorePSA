@@ -178,6 +178,7 @@ export function App() {
               tool={route.tool}
               groups={groups[route.tool]}
               states={states}
+              pins={pins}
               onOpen={(groupIndex) => setRoute({ view: 'group', tool: route.tool, groupIndex })}
             />
           ) : (
@@ -216,7 +217,7 @@ export function App() {
       )}
 
       {route.view === 'report' && checks && (
-        <Report project={project} checks={checks} states={states} skipped={skipped} />
+        <Report project={project} checks={checks} states={states} skipped={skipped} pins={pins} />
       )}
     </>
   );
