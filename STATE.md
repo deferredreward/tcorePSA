@@ -114,9 +114,12 @@ Known gaps / follow-ups (spun off as suggested tasks):
 **Status: the write half of the two-isolated-pipelines design. The pure file builder
 (`buildTc3CheckDataFiles`) is round-trip tested in node — 16 cases, `npm run test:tc3`, mirroring
 `test:tc4`: build a decision → assert path + record shape → re-import through the tC3 READ path
-(`importTc3`) and assert it seeds back to the same check id. The orchestrator (`syncTc3Project`,
-pull→merge→push over DCS) is NOT live-verified — same un-verified authenticated DCS write path as
-burrito sync (no credentials available); its request shapes reuse `src/lib/dcs.js` verbatim.**
+(`importTc3`) and assert it seeds back to the same check id. The full pull→build→push→re-import
+flow is ALSO live-verified against real authenticated DCS (`scripts/live-tc3-sync.mjs`, run
+2026-07-08 with a push-capable PAT): it appended a labeled checkData comment to
+`deferredreward/en_rnb_oba_book`, DCS accepted the batch commit, and the decision re-imported off
+the live server on the same check id — see the DCS section, this is the first live confirmation of
+the authenticated `commitFiles` write path anywhere in the app.**
 
 When a user edits decisions on a `format: 'tc3'` project, the `⇅` button writes them back to the
 *same* Door43 repo in tC3's native `.apps/translationCore/checkData/` layout — never a burrito.
@@ -161,8 +164,9 @@ Design decisions:
   first-sync create-repo path.
 
 Known gaps / follow-ups:
-- **Orchestrator un-live-verified** (same as burrito sync): the pull→merge→push flow and its DCS
-  writes have not run against live authenticated DCS. The pure builder + round-trip are verified.
+- **`syncTc3Project` itself (store + `loadChecks` wiring) is exercised only in-app**, not in the
+  live node harness — the harness replicates the orchestrator's DCS steps but bypasses IndexedDB
+  and the TSV fetch (it passes a synthetic check). The DCS write transport it drives is identical.
 - **Decisions on checks absent from the current pinned list are not written** (the builder iterates
   the fetched checks and skips orphan states) — the same "older tC3 without `checkId`" re-anchor
   gap noted in the read section.
@@ -173,9 +177,13 @@ Known gaps / follow-ups:
 
 **Status: implemented and tested against a fake DCS (4-scenario integration test in
 `sync.integration.test.js`); the unauthenticated network path verified live in-browser against
-real DCS. Authenticated write (createRepo/commitFiles) and OAuth are NOT yet verified against
-live DCS — no credentials/client-id were available; the request shapes are verified against
-DCS's own swagger (`ChangeFilesOptions`/`ChangeFileOperation`).**
+real DCS. Authenticated **`commitFiles`** (the batch write) is now verified live too — the tC3
+live harness (`scripts/live-tc3-sync.mjs`, 2026-07-08) pushed a real batch `create` commit to
+`deferredreward/en_rnb_oba_book` with a PAT and read it back, exercising the same `dcs.js`
+transport (`getRepo`/`getBranchSha`/`downloadArchive`/`getTree`/`commitFiles`/`toBase64`) that
+burrito sync uses. Still NOT live-verified: `createRepo` (first-sync repo creation) and the OAuth
+PKCE flow — no throwaway account / client-id exercised those. `update`/`delete` operations and
+the empty-repo first-commit (branch omitted) are covered only by the fake-DCS test.**
 
 The tC3 "Upload to Door43" story rebuilt for the browser: check offline on one device, sync when
 online, pick up on another. Design decisions:
