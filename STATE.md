@@ -80,7 +80,10 @@ online, pick up on another. Design decisions:
   unauthenticated). Sign-in: (a) OAuth PKCE public client — bible-editor's DCS OAuth design minus
   the backend; the token endpoint's CORS preflight only allows GET, so the code exchange is a
   form-encoded *simple request* (no preflight). Needs a one-time OAuth app registration on DCS
-  (public client, redirect = app URL) exposed as `VITE_DCS_CLIENT_ID`; access tokens auto-refresh
+  (public client, redirect = app URL) exposed as `VITE_DCS_CLIENT_ID`. **Gitea checks "Confidential
+  Client" by default when you register the app** — leave it checked and the token exchange fails
+  with `invalid empty client secret` (our PKCE exchange sends no secret by design); uncheck it in
+  the DCS app's Settings → Applications. Access tokens auto-refresh
   (`ensureFreshAuth`). (b) Zero-setup fallback: username+password → per-app access token
   (name qualified per device — `tcore-checks-pwa (<actorId>)` — since Gitea only reveals the secret
   at creation and can't re-read it; per-device naming means a second device's sign-in doesn't
