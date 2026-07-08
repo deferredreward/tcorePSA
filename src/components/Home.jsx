@@ -11,6 +11,7 @@ import {
   saveCheckStates,
 } from '../lib/store';
 import { importBurrito, seedStatesFromDecisions } from '../lib/tc4';
+import { detectProjectFormat, importTc3 } from '../lib/tc3';
 import { syncProject, fetchProjectFromDcs, listMyRepos, describeSyncResult } from '../lib/sync';
 
 export function Home({ onOpen, auth }) {
@@ -81,14 +82,47 @@ export function Home({ onOpen, auth }) {
     await refresh();
   }
 
+  // A legacy translationCore 3 project (manifest.json + .apps/translationCore
+  // checkData) — the format that predates Scripture Burrito. Read-only import:
+  // one PWA project for its book, check states seeded from the checkData
+  // sidecars, pinned to the resource versions the manifest recorded. Marked
+  // `format: 'tc3'` so the sync path routes it to the (separate) tC3 pipeline
+  // rather than the burrito one.
+  async function addTc3(zipBytes, sourceName, dcs = null) {
+    const t = importTc3(zipBytes);
+    const parsed = parseUsfm(t.usfmText);
+    if (!parsed.bookCode || !Object.keys(parsed.chapters).length) {
+      throw new Error(`Could not read a book from the tC3 project ${sourceName}`);
+    }
+    const project = {
+      id: `${parsed.bookCode}-${Date.now()}`,
+      name: `${parsed.bookName || parsed.bookCode} (${t.name || sourceName})`,
+      ...parsed,
+      usfmText: t.usfmText,
+      createdAt: new Date().toISOString(),
+      format: 'tc3',
+      pins: t.pins,
+      ...(dcs ? { dcs } : {}),
+    };
+    await saveProject(project);
+    const seeded = seedStatesFromDecisions(t.decisions);
+    if (Object.keys(seeded).length) await saveCheckStates(project.id, seeded);
+    await refresh();
+  }
+
   // Pull a Door43 repo down as a new project (or set of book projects),
-  // stamping the dcs link on each so it syncs back to that repo.
+  // stamping the dcs link on each so it syncs back to that repo. Detects a
+  // legacy tC3 repo vs. a tC4 burrito and routes to the matching importer.
   async function importRepo(ref) {
     setError(null);
     setBusy(true);
     try {
       const fetched = await fetchProjectFromDcs(ref, auth);
-      await addBurrito(fetched.zip, fetched.name, fetched.dcs);
+      if (detectProjectFormat(fetched.zip) === 'tc3') {
+        await addTc3(fetched.zip, fetched.name, fetched.dcs);
+      } else {
+        await addBurrito(fetched.zip, fetched.name, fetched.dcs);
+      }
       setRepoRef('');
       setMyRepos(null);
     } catch (err) {
@@ -128,9 +162,11 @@ export function Home({ onOpen, auth }) {
     setBusy(true);
     try {
       for (const file of e.target.files) {
-        if (/\.zip$/i.test(file.name))
-          await addBurrito(new Uint8Array(await file.arrayBuffer()), file.name);
-        else await addProject(await file.text(), file.name);
+        if (/\.zip$/i.test(file.name)) {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          if (detectProjectFormat(bytes) === 'tc3') await addTc3(bytes, file.name);
+          else await addBurrito(bytes, file.name);
+        } else await addProject(await file.text(), file.name);
       }
     } catch (err) {
       setError(String(err.message || err));
@@ -167,12 +203,13 @@ export function Home({ onOpen, auth }) {
         <h2>Add a translation</h2>
         <p class="muted">
           Upload a USFM file of your translation — a whole book or just the portion you've
-          translated — or a translationCore 4 project (Scripture Burrito .zip), or try a sample
-          (Titus, unfoldingWord ULT).
+          translated — or a translationCore project .zip (v3, or v4 Scripture Burrito), or
+          try a sample (Titus, unfoldingWord ULT). A tC3 project on Door43 imports directly
+          from its repo below.
         </p>
         <div class="row">
           <label class="primary">
-            Upload USFM / tC4 zip
+            Upload USFM / tC zip
             <input
               type="file"
               accept=".usfm,.sfm,.txt,.usf,.zip"
@@ -252,7 +289,7 @@ export function Home({ onOpen, auth }) {
               </div>
             )}
           </div>
-          {auth && (
+          {auth && p.format !== 'tc3' && (
             <button
               class="secondary"
               style="padding:6px 10px"

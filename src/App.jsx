@@ -62,8 +62,10 @@ export function App() {
     const p = await getProject(id);
     setProject(p);
     setStates(await getCheckStates(id));
-    // imported tC4 projects check against their pinned resource versions
-    const projectPins = p.tc4 ? (await getBurrito(p.tc4.importId))?.pins || null : null;
+    // imported projects check against their pinned resource versions: tC4
+    // burritos carry pins in their stored import context; tC3 imports carry
+    // them on the project directly (p.pins)
+    const projectPins = p.tc4 ? (await getBurrito(p.tc4.importId))?.pins || null : p.pins || null;
     setPins(projectPins);
     // Load the original-language (UHB/UGNT) and ULT books in the background —
     // together they power the English gloss of each quote, but checks shouldn't
