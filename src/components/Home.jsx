@@ -9,13 +9,18 @@ import {
   deleteProject,
   saveBurrito,
   saveCheckStates,
+  getDcsAuth,
 } from '../lib/store';
 import { importBurrito, seedStatesFromDecisions } from '../lib/tc4';
+import { syncProject } from '../lib/sync';
+import { Door43Card } from './Door43Card';
 
 export function Home({ onOpen }) {
   const [projects, setProjects] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [syncStatus, setSyncStatus] = useState({}); // projectId -> message
 
   async function refresh() {
     const ids = await listProjects();
@@ -24,6 +29,7 @@ export function Home({ onOpen }) {
   }
   useEffect(() => {
     refresh();
+    getDcsAuth().then(setAuth);
   }, []);
 
   async function addProject(usfmText, sourceName) {
@@ -44,9 +50,10 @@ export function Home({ onOpen }) {
   }
 
   // A tC4 Scripture Burrito project zip: one PWA project per book, check
-  // states seeded from the checking/ decision sidecars
-  async function addBurrito(file) {
-    const imported = importBurrito(new Uint8Array(await file.arrayBuffer()));
+  // states seeded from the checking/ decision sidecars. `dcs` (from an
+  // online import) links every book project to its Door43 repo for syncing.
+  async function addBurrito(zipBytes, sourceName, dcs = null) {
+    const imported = importBurrito(zipBytes);
     const importId = `imp-${Date.now()}`;
     await saveBurrito(importId, {
       metadata: imported.metadata,
@@ -57,7 +64,7 @@ export function Home({ onOpen }) {
     const projectName =
       imported.metadata?.identification?.name?.en ||
       imported.metadata?.identification?.abbreviation?.en ||
-      file.name;
+      sourceName;
     for (const { book, usfmText } of imported.books) {
       const parsed = parseUsfm(usfmText);
       const project = {
@@ -67,6 +74,7 @@ export function Home({ onOpen }) {
         usfmText,
         createdAt: new Date().toISOString(),
         tc4: { importId, book },
+        ...(dcs ? { dcs } : {}),
       };
       await saveProject(project);
       const seeded = seedStatesFromDecisions(imported.decisions[book] || {});
@@ -75,12 +83,33 @@ export function Home({ onOpen }) {
     await refresh();
   }
 
+  async function sync(projectId) {
+    setSyncStatus((s) => ({ ...s, [projectId]: 'Syncing…' }));
+    try {
+      const result = await syncProject(projectId, auth, {
+        promptRepoName: (dflt) => prompt('Door43 repository name for this project:', dflt),
+      });
+      const msg = result.cancelled
+        ? ''
+        : !result.pushed && !result.pulled
+          ? '✓ Up to date'
+          : `✓ ${[result.pulled && `pulled ${result.pulled}`, result.pushed && `pushed ${result.pushed}`]
+              .filter(Boolean)
+              .join(', ')}`;
+      setSyncStatus((s) => ({ ...s, [projectId]: msg }));
+      await refresh();
+    } catch (err) {
+      setSyncStatus((s) => ({ ...s, [projectId]: `⚠ ${err.message || err}` }));
+    }
+  }
+
   async function onFile(e) {
     setError(null);
     setBusy(true);
     try {
       for (const file of e.target.files) {
-        if (/\.zip$/i.test(file.name)) await addBurrito(file);
+        if (/\.zip$/i.test(file.name))
+          await addBurrito(new Uint8Array(await file.arrayBuffer()), file.name);
         else await addProject(await file.text(), file.name);
       }
     } catch (err) {
@@ -142,6 +171,12 @@ export function Home({ onOpen }) {
         {error && <p class="error">{error}</p>}
       </div>
 
+      <Door43Card
+        auth={auth}
+        onAuthChange={setAuth}
+        onImport={({ zip, name, dcs }) => addBurrito(zip, name, dcs)}
+      />
+
       <h2 style="font-size:0.95rem;color:var(--ocean)">Projects</h2>
       {!projects.length && <p class="muted">No projects yet.</p>}
       {projects.map((p) => (
@@ -150,8 +185,28 @@ export function Home({ onOpen }) {
             <div class="item-title">{p.bookName || BOOKS[p.bookCode] || p.bookCode}</div>
             <div class="item-sub">
               {p.name} · {Object.keys(p.chapters).length} chapters
+              {p.dcs && ` · ⇅ ${p.dcs.owner}/${p.dcs.repo}`}
             </div>
+            {syncStatus[p.id] && (
+              <div class="item-sub" style="color:var(--ocean)">
+                {syncStatus[p.id]}
+              </div>
+            )}
           </div>
+          {auth && (
+            <button
+              class="secondary"
+              style="padding:6px 10px"
+              title="Sync with Door43"
+              disabled={syncStatus[p.id] === 'Syncing…'}
+              onClick={(e) => {
+                e.stopPropagation();
+                sync(p.id);
+              }}
+            >
+              ⇅
+            </button>
+          )}
           <button
             class="secondary"
             style="padding:6px 10px"

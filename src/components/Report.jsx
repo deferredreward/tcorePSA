@@ -4,7 +4,8 @@ import { groupTitle } from '../lib/titles';
 import { buildReportMarkdown, downloadText } from '../lib/report';
 import { exportBurrito } from '../lib/tc4';
 import { getActorId, getJournal } from '../lib/journal';
-import { getBurrito } from '../lib/store';
+import { getBurrito, getDcsAuth } from '../lib/store';
+import { syncProject } from '../lib/sync';
 import { isDone } from './CheckList';
 
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
@@ -72,8 +73,37 @@ function ToolReport({ tool, checks, states, pins }) {
   );
 }
 
-export function Report({ project, checks, states, skipped, pins }) {
+export function Report({ project, checks, states, skipped, pins, onSynced }) {
   const [exportError, setExportError] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [syncMsg, setSyncMsg] = useState(null);
+
+  useEffect(() => {
+    getDcsAuth().then(setAuth);
+  }, []);
+
+  // Sync with the linked Door43 repo (pull + merge + push); first sync
+  // creates/links a repo under the signed-in account
+  async function sync() {
+    setSyncMsg('Syncing…');
+    try {
+      const result = await syncProject(project.id, auth, {
+        promptRepoName: (dflt) => prompt('Door43 repository name for this project:', dflt),
+      });
+      setSyncMsg(
+        result.cancelled
+          ? null
+          : !result.pushed && !result.pulled
+            ? '✓ Up to date'
+            : `✓ ${[result.pulled && `pulled ${result.pulled} decisions`, result.pushed && `pushed ${result.pushed} files`]
+                .filter(Boolean)
+                .join(', ')}`,
+      );
+      if (!result.cancelled) await onSynced?.();
+    } catch (err) {
+      setSyncMsg(`⚠ ${err.message || err}`);
+    }
+  }
 
   async function download() {
     const md = await buildReportMarkdown(project, checks, states, skipped, pins);
@@ -107,6 +137,17 @@ export function Report({ project, checks, states, skipped, pins }) {
       <button class="secondary" style="width:100%;margin-bottom:12px" onClick={downloadBurrito}>
         🌯 Export tC4 project (Scripture Burrito .zip)
       </button>
+      {auth && (
+        <button
+          class="secondary"
+          style="width:100%;margin-bottom:12px"
+          onClick={sync}
+          disabled={syncMsg === 'Syncing…'}
+        >
+          ⇅ Sync with Door43{project.dcs ? ` (${project.dcs.owner}/${project.dcs.repo})` : ''}
+        </button>
+      )}
+      {syncMsg && <p class={syncMsg.startsWith('⚠') ? 'error' : 'muted'}>{syncMsg}</p>}
       {exportError && <p class="error">Export failed: {exportError}</p>}
       {(skipped.tn > 0 || skipped.tw > 0) && (
         <p class="muted">

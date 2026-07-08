@@ -229,7 +229,18 @@ export function App() {
       )}
 
       {route.view === 'report' && checks && (
-        <Report project={project} checks={checks} states={states} skipped={skipped} pins={pins} />
+        <Report
+          project={project}
+          checks={checks}
+          states={states}
+          skipped={skipped}
+          pins={pins}
+          onSynced={async () => {
+            // a sync may have merged remote decisions and linked a DCS repo
+            setProject(await getProject(project.id));
+            setStates(await getCheckStates(project.id));
+          }}
+        />
       )}
     </>
   );

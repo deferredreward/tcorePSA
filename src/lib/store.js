@@ -35,6 +35,19 @@ export function saveBurrito(importId, data) {
   return set(`burrito:${importId}`, data);
 }
 
+// Door43 (DCS) account: {username, token} for this install
+export async function getDcsAuth() {
+  return (await get('dcs:auth')) || null;
+}
+
+export function saveDcsAuth(auth) {
+  return set('dcs:auth', auth);
+}
+
+export function clearDcsAuth() {
+  return del('dcs:auth');
+}
+
 // Check states: one record per project holding {checkId: state}
 // state = {selections, comment, reminder, nothingToSelect, done}
 export async function getCheckStates(projectId) {

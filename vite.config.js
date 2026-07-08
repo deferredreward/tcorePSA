@@ -25,8 +25,11 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png}'],
         runtimeCaching: [
           {
-            // Door43 resource fetches: serve from cache, refresh in background
-            urlPattern: /^https:\/\/git\.door43\.org\/.*/i,
+            // Door43 resource fetches: serve from cache, refresh in background.
+            // /api/v1 (DCS sync: repo state, trees, archives) and /login
+            // (OAuth) must never be served stale — a cached branch head would
+            // make sync diff against an outdated tree.
+            urlPattern: /^https:\/\/git\.door43\.org\/(?!api\/|login\/).*/i,
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'door43-resources',

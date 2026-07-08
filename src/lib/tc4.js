@@ -388,11 +388,12 @@ function defaultSettings(checks) {
 
 // ---------- export ----------
 
-// Build a conforming tC4 burrito zip. `burrito` is the stored import context
-// (null for fresh USFM uploads); `journal` is {actorId, actorInfo, events}.
-// For imported multi-book projects, sibling books' files round-trip verbatim;
-// only the current project's book is updated from local states.
-export function exportBurrito({ project, burrito, checks, states, journal }) {
+// Build the conforming tC4 burrito as a {path: Uint8Array} file map. `burrito`
+// is the stored import context (null for fresh USFM uploads); `journal` is
+// {actorId, actorInfo, events}. For imported multi-book projects, sibling
+// books' files round-trip verbatim; only the current project's book is
+// updated from local states. (DCS sync diffs/commits these files directly.)
+export function buildBurritoFiles({ project, burrito, checks, states, journal }) {
   const book = project.bookCode.toUpperCase();
   const files = { ...(burrito?.files || {}) };
   delete files['metadata.json']; // regenerated below
@@ -460,5 +461,10 @@ export function exportBurrito({ project, burrito, checks, states, journal }) {
   rebuildIngredients(metadata, files);
   files['metadata.json'] = jsonBytes(metadata);
 
-  return zipSync(files, { level: 6 });
+  return files;
+}
+
+// Same, zipped — the download-a-zip export path.
+export function exportBurrito(opts) {
+  return zipSync(buildBurritoFiles(opts), { level: 6 });
 }
