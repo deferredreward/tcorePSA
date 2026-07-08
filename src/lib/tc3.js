@@ -93,17 +93,23 @@ function pinVersion(raw) {
 
 // Build the {translationNotes, translationWords} pin map in the same shape the
 // burrito's checking/resources.json produces (BURRITO-SPEC §5.3), so loadChecks
-// fetches the very release the project was checked against. tC3's manifest
-// records this per tool as tc_<gl>_check_version_<tool> + toolsSelectedOwners.
+// fetches the very release the project was checked against. tC3 stores the GL,
+// owner, and version PER TOOL — a project can check tN and tW against different
+// gateway languages — so each pin is resolved from that tool's own fields
+// (`toolsSelectedGLs[tool]`, `toolsSelectedOwners[tool]`,
+// `tc_<gl>_check_version_<tool>`), mirroring translationCore's MyProjectsActions.
 function pinsFromManifest(manifest) {
-  const gl = manifest.toolsSelectedGLs?.translationNotes || 'en';
+  const gls = manifest.toolsSelectedGLs || {};
   const owners = manifest.toolsSelectedOwners || {};
-  const pin = (tool, repo) => ({
-    repoPath: `git.door43.org/${owners[tool] || 'unfoldingWord'}/${gl}_${repo}`,
-    version: pinVersion(manifest[`tc_${gl}_check_version_${tool}`]),
-  });
+  const pin = (tool, repo) => {
+    const gl = gls[tool] || 'en';
+    return {
+      repoPath: `git.door43.org/${owners[tool] || 'unfoldingWord'}/${gl}_${repo}`,
+      version: pinVersion(manifest[`tc_${gl}_check_version_${tool}`]),
+    };
+  };
   return {
-    gl,
+    gl: gls.translationNotes || 'en',
     owner: owners.translationNotes || 'unfoldingWord',
     pins: {
       translationNotes: pin('translationNotes', 'tn'),

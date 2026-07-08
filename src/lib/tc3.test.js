@@ -126,6 +126,30 @@ describe('importTc3', () => {
     });
   });
 
+  it('resolves tN and tW pins from each tool\'s own GL/owner/version', () => {
+    // a project checking tN against en/unfoldingWord but tW against a different
+    // GL + owner — the pins must not both inherit the tN gateway language
+    const zip = buildZip({
+      'manifest.json': strToU8(
+        JSON.stringify({
+          ...MANIFEST,
+          toolsSelectedGLs: { translationNotes: 'en', translationWords: 'es-419' },
+          toolsSelectedOwners: { translationNotes: 'unfoldingWord', translationWords: 'Door43-Catalog' },
+          'tc_es-419_check_version_translationWords': 'v12_Door43-Catalog',
+        }),
+      ),
+    });
+    const t = importTc3(zip);
+    expect(t.pins.translationNotes).toEqual({
+      repoPath: 'git.door43.org/unfoldingWord/en_tn',
+      version: 'v88',
+    });
+    expect(t.pins.translationWords).toEqual({
+      repoPath: 'git.door43.org/Door43-Catalog/es-419_tw',
+      version: 'v12',
+    });
+  });
+
   it('merges the per-category checkData files into one tc4-shaped record per check', () => {
     const t = importTc3(buildZip());
     expect(t.decisions.tn).toHaveLength(2);
