@@ -124,6 +124,11 @@ describe('importTc3', () => {
       repoPath: 'git.door43.org/unfoldingWord/en_tn',
       version: 'v88',
     });
+    // tA titles/articles follow the tN gateway (tC3 records no tA version)
+    expect(t.pins.translationAcademy).toEqual({
+      repoPath: 'git.door43.org/unfoldingWord/en_ta',
+      version: 'master',
+    });
   });
 
   it('resolves tN and tW pins from each tool\'s own GL/owner/version', () => {
@@ -147,6 +152,11 @@ describe('importTc3', () => {
     expect(t.pins.translationWords).toEqual({
       repoPath: 'git.door43.org/Door43-Catalog/es-419_tw',
       version: 'v12',
+    });
+    // tA follows the tN gateway, not tW's
+    expect(t.pins.translationAcademy).toEqual({
+      repoPath: 'git.door43.org/unfoldingWord/en_ta',
+      version: 'master',
     });
   });
 

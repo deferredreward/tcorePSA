@@ -108,12 +108,19 @@ function pinsFromManifest(manifest) {
       version: pinVersion(manifest[`tc_${gl}_check_version_${tool}`]),
     };
   };
+  const tnGl = gls.translationNotes || 'en';
+  const tnOwner = owners.translationNotes || 'unfoldingWord';
   return {
-    gl: gls.translationNotes || 'en',
-    owner: owners.translationNotes || 'unfoldingWord',
+    gl: tnGl,
+    owner: tnOwner,
     pins: {
       translationNotes: pin('translationNotes', 'tn'),
       translationWords: pin('translationWords', 'tw'),
+      // tN check types resolve their titles/articles from translationAcademy.
+      // tC3 ties tA to the tN gateway (same owner + GL) but records no tA
+      // version (translationCore's MyProjectsActions adds the tA URL without a
+      // version), so it stays master — matching how tC itself fetches it.
+      translationAcademy: { repoPath: `git.door43.org/${tnOwner}/${tnGl}_ta`, version: 'master' },
     },
   };
 }
