@@ -8,9 +8,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:tc4": "node scripts/test-tc4.mjs"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "idb-keyval": "^6.2.1",
     "marked": "^12.0.2",
     "preact": "^10.25.4",
@@ -20,6 +22,8 @@
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.9.3",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "vite": "^5.4.11",
     "vite-plugin-pwa": "^0.21.1",
     "vitest": "^2.1.8"

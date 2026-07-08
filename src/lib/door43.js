@@ -20,28 +20,41 @@ async function fetchCached(url) {
   }
 }
 
-export function fetchTnTsv(bookCode) {
-  return fetchCached(`${BASE}/en_tn/raw/branch/master/tn_${bookCode}.tsv`);
+// Resource pins from a tC4 burrito's checking/resources.json (BURRITO-SPEC
+// §5.3): {repoPath, version}. A version is the git ref the project was
+// checked against — vN… tags pin an exact release; anything else is a branch.
+function pinnedUrl(pin, fallbackRepo, filePath) {
+  const repo = pin?.repoPath ? `https://${pin.repoPath}` : `${BASE}/${fallbackRepo}`;
+  const version = pin?.version;
+  const ref = version && version !== 'master'
+    ? (/^v\d/.test(version) ? `tag/${version}` : `branch/${version}`)
+    : 'branch/master';
+  return `${repo}/raw/${ref}/${filePath}`;
 }
 
+export function fetchTnTsv(bookCode, pin) {
+  return fetchCached(pinnedUrl(pin, 'en_tn', `tn_${bookCode}.tsv`));
+}
+
+// The TWL list repo (en_twl) has no slot in the §5.3 pins — always master
 export function fetchTwlTsv(bookCode) {
   return fetchCached(`${BASE}/en_twl/raw/branch/master/twl_${bookCode}.tsv`);
 }
 
 // rcLink like rc://*/tw/dict/bible/kt/faith -> bible/kt/faith.md
-export function fetchTwArticle(rcLink) {
+export function fetchTwArticle(rcLink, pin) {
   const m = rcLink.match(/rc:\/\/[^/]+\/tw\/dict\/(.+)$/);
   if (!m) return Promise.reject(new Error(`Bad tW link: ${rcLink}`));
-  return fetchCached(`${BASE}/en_tw/raw/branch/master/${m[1]}.md`);
+  return fetchCached(pinnedUrl(pin, 'en_tw', `${m[1]}.md`));
 }
 
 // translationAcademy article for a tN check type, e.g. figs-metaphor
-export function fetchTaTitle(slug) {
-  return fetchCached(`${BASE}/en_ta/raw/branch/master/translate/${slug}/title.md`);
+export function fetchTaTitle(slug, pin) {
+  return fetchCached(pinnedUrl(pin, 'en_ta', `translate/${slug}/title.md`));
 }
 
-export function fetchTaArticle(slug) {
-  return fetchCached(`${BASE}/en_ta/raw/branch/master/translate/${slug}/01.md`);
+export function fetchTaArticle(slug, pin) {
+  return fetchCached(pinnedUrl(pin, 'en_ta', `translate/${slug}/01.md`));
 }
 
 export function fetchSampleUsfm(fileNum, bookCode) {

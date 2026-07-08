@@ -2,14 +2,14 @@ import { useEffect, useState } from 'preact/hooks';
 import { groupTitle } from '../lib/titles';
 import { isDone } from './CheckList';
 
-export function GroupList({ tool, groups, states, onOpen }) {
+export function GroupList({ tool, groups, states, pins, onOpen }) {
   const [titles, setTitles] = useState({});
 
   useEffect(() => {
     let live = true;
     (async () => {
       const entries = await Promise.all(
-        groups.map(async (g) => [g.id, await groupTitle(tool, g.id)]),
+        groups.map(async (g) => [g.id, await groupTitle(tool, g.id, pins?.translationAcademy)]),
       );
       if (live) setTitles(Object.fromEntries(entries));
     })();

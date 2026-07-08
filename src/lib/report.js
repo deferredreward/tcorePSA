@@ -4,11 +4,11 @@ import { groupTitle } from './titles';
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
 
 function isDone(state) {
-  return !!state && (state.nothingToSelect || (state.selections || []).length > 0);
+  return !!state && !state.invalidated && (state.nothingToSelect || (state.selections || []).length > 0);
 }
 
 // Markdown report covering only checks that are done, flagged, or commented
-export async function buildReportMarkdown(project, checks, states, skipped) {
+export async function buildReportMarkdown(project, checks, states, skipped, pins) {
   const lines = [
     `# Check report — ${project.bookName}`,
     '',
@@ -32,7 +32,7 @@ export async function buildReportMarkdown(project, checks, states, skipped) {
         return s && (isDone(s) || s.reminder || s.comment);
       });
       if (!included.length) continue;
-      const title = await groupTitle(tool, group.id);
+      const title = await groupTitle(tool, group.id, pins?.translationAcademy);
       const gDone = group.checks.filter((c) => isDone(states[c.id])).length;
       lines.push(`### ${title} (${gDone}/${group.checks.length} checked)`, '');
       for (const c of included) {

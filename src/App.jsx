@@ -8,7 +8,8 @@ import { fetchTnTsv, fetchTwlTsv, fetchUltUsfm } from './lib/door43';
 import { parseTnChecks, parseTwChecks, groupChecks } from './lib/checks';
 import { parseAlignments } from './lib/alignment';
 import { getVerseText } from './lib/verses';
-import { getProject, getCheckStates, saveCheckState } from './lib/store';
+import { getProject, getCheckStates, saveCheckState, getBurrito } from './lib/store';
+import { appendDecisionEvent } from './lib/journal';
 
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
 
@@ -18,6 +19,7 @@ export function App() {
   const [checks, setChecks] = useState(null); // {tn: [], tw: []} filtered to uploaded verses
   const [skipped, setSkipped] = useState({ tn: 0, tw: 0 });
   const [states, setStates] = useState({});
+  const [pins, setPins] = useState(null); // tC4 resource pins (BURRITO-SPEC §5.3)
   const [alignments, setAlignments] = useState(null); // ULT word alignments for English glosses
   const [loadError, setLoadError] = useState(null);
 
@@ -36,13 +38,16 @@ export function App() {
       const p = await getProject(id);
       setProject(p);
       setStates(await getCheckStates(id));
+      // imported tC4 projects check against their pinned resource versions
+      const projectPins = p.tc4 ? (await getBurrito(p.tc4.importId))?.pins || null : null;
+      setPins(projectPins);
       // Load the aligned ULT in the background — it powers the English gloss of
       // each original-language quote, but checks shouldn't wait on it.
       fetchUltUsfm(p.bookCode)
         .then((usfmText) => setAlignments(parseAlignments(usfmText)))
         .catch(() => {});
       const [tnTsv, twlTsv] = await Promise.all([
-        fetchTnTsv(p.bookCode),
+        fetchTnTsv(p.bookCode, projectPins?.translationNotes),
         fetchTwlTsv(p.bookCode),
       ]);
       // partial-book support: only keep checks whose verse exists in the upload
@@ -59,8 +64,27 @@ export function App() {
   }
 
   async function onSaveState(checkId, state) {
-    const next = await saveCheckState(project.id, checkId, state);
+    // navigation re-saves unchanged state; don't stamp/journal a no-op
+    const prev = states[checkId];
+    const hasContent = state.selections?.length || state.comment || state.reminder || state.nothingToSelect;
+    if (!prev && !hasContent) return;
+    if (prev && JSON.stringify({ ...prev, modifiedAt: 0 }) === JSON.stringify({ ...state, modifiedAt: 0 }))
+      return;
+    // a fresh decision on the current text resolves any imported re-review flag
+    const stamped = { ...state, invalidated: false, modifiedAt: new Date().toISOString() };
+    const next = await saveCheckState(project.id, checkId, stamped);
     setStates({ ...next });
+    // journal every decision (BURRITO-SPEC §8 draft); never block the UI on it
+    const tool = checkId.startsWith('tw-') ? 'tw' : 'tn';
+    const check = checks[tool].find((c) => c.id === checkId);
+    if (check) {
+      appendDecisionEvent(project.id, {
+        book: project.bookCode,
+        tool,
+        check,
+        state: stamped,
+      }).catch(() => {});
+    }
   }
 
   // The ordered check list the runner is stepping through
@@ -162,6 +186,7 @@ export function App() {
               tool={route.tool}
               groups={groups[route.tool]}
               states={states}
+              pins={pins}
               onOpen={(groupIndex) => setRoute({ view: 'group', tool: route.tool, groupIndex })}
             />
           ) : (
@@ -193,6 +218,7 @@ export function App() {
           checks={activeChecks()}
           index={route.index}
           states={states}
+          pins={pins}
           alignments={alignments}
           onSave={onSaveState}
           onNavigate={(index) => setRoute({ ...route, index })}
@@ -200,7 +226,7 @@ export function App() {
       )}
 
       {route.view === 'report' && checks && (
-        <Report project={project} checks={checks} states={states} skipped={skipped} />
+        <Report project={project} checks={checks} states={states} skipped={skipped} pins={pins} />
       )}
     </>
   );

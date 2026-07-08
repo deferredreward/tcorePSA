@@ -2,19 +2,22 @@ import { useEffect, useState } from 'preact/hooks';
 import { groupChecks } from '../lib/checks';
 import { groupTitle } from '../lib/titles';
 import { buildReportMarkdown, downloadText } from '../lib/report';
+import { exportBurrito } from '../lib/tc4';
+import { getActorId, getJournal } from '../lib/journal';
+import { getBurrito } from '../lib/store';
 import { isDone } from './CheckList';
 
 const TOOL_NAMES = { tn: 'translationNotes', tw: 'translationWords' };
 
-function ToolReport({ tool, checks, states }) {
+function ToolReport({ tool, checks, states, pins }) {
   const groups = groupChecks(checks);
   const [titles, setTitles] = useState({});
 
   useEffect(() => {
     let live = true;
-    Promise.all(groups.map(async (g) => [g.id, await groupTitle(tool, g.id)])).then(
-      (entries) => live && setTitles(Object.fromEntries(entries)),
-    );
+    Promise.all(
+      groups.map(async (g) => [g.id, await groupTitle(tool, g.id, pins?.translationAcademy)]),
+    ).then((entries) => live && setTitles(Object.fromEntries(entries)));
     return () => {
       live = false;
     };
@@ -69,24 +72,50 @@ function ToolReport({ tool, checks, states }) {
   );
 }
 
-export function Report({ project, checks, states, skipped }) {
+export function Report({ project, checks, states, skipped, pins }) {
+  const [exportError, setExportError] = useState(null);
+
   async function download() {
-    const md = await buildReportMarkdown(project, checks, states, skipped);
+    const md = await buildReportMarkdown(project, checks, states, skipped, pins);
     downloadText(`${project.bookCode}-check-report.md`, md);
   }
+
+  // tC4 Scripture Burrito export: full project zip (metadata + USFM +
+  // checking sidecars + §8-draft journal), importable by translationCore 4
+  async function downloadBurrito() {
+    setExportError(null);
+    try {
+      const burrito = project.tc4 ? await getBurrito(project.tc4.importId) : null;
+      const zip = exportBurrito({
+        project,
+        burrito,
+        checks,
+        states,
+        journal: { actorId: await getActorId(), events: await getJournal(project.id) },
+      });
+      downloadText(`${project.bookCode.toLowerCase()}-tc4-burrito.zip`, zip, 'application/zip');
+    } catch (err) {
+      setExportError(String(err.message || err));
+    }
+  }
+
   return (
     <div class="screen">
       <button class="primary" style="width:100%;margin-bottom:12px" onClick={download}>
         ⬇ Download report (.md)
       </button>
+      <button class="secondary" style="width:100%;margin-bottom:12px" onClick={downloadBurrito}>
+        🌯 Export tC4 project (Scripture Burrito .zip)
+      </button>
+      {exportError && <p class="error">Export failed: {exportError}</p>}
       {(skipped.tn > 0 || skipped.tw > 0) && (
         <p class="muted">
           {skipped.tn + skipped.tw} checks fall outside the portion you uploaded and are not
           counted.
         </p>
       )}
-      <ToolReport tool="tn" checks={checks.tn} states={states} />
-      <ToolReport tool="tw" checks={checks.tw} states={states} />
+      <ToolReport tool="tn" checks={checks.tn} states={states} pins={pins} />
+      <ToolReport tool="tw" checks={checks.tw} states={states} pins={pins} />
     </div>
   );
 }
