@@ -22,6 +22,12 @@ Useful entry points in `../translationCore/src/js`:
 
 Relevant packages tC depends on (same ones we use / could use): `usfm-js`, `word-aligner`,
 `tsv-groupdata-parser`, `tc-ui-toolkit` (the latter's `getAlignedText` is the canonical
-alignment-gloss routine that our [`src/lib/alignment.js`](src/lib/alignment.js) reimplements).
+alignment-gloss routine).
 
 Other sibling repos under `../` worth consulting: `gateway-edit`, `tc-create-app`.
+
+## Working state
+
+See [STATE.md](STATE.md) for design decisions and known gaps — including the measured divergence
+between our `src/lib/alignment.js` and tC's `getAlignedText` (it is **not** a faithful port and
+needs rework).
