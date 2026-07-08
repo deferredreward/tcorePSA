@@ -28,27 +28,64 @@ export function App() {
   const [showAccount, setShowAccount] = useState(false);
   const [authError, setAuthError] = useState(null);
 
-  // Load any saved Door43 account; finish an OAuth redirect if we're returning
-  // from one (runs regardless of whether the account panel is open).
+  // Finish an OAuth redirect if we're returning from one, else load any saved
+  // Door43 account. Sequenced (not parallel) so the stored read can't land
+  // after — and clobber — a freshly minted OAuth token.
   useEffect(() => {
-    getDcsAuth().then((a) => a && setAuth(a));
-    completeOAuth()
-      .then(async (a) => {
-        if (a) {
+    (async () => {
+      try {
+        const fresh = await completeOAuth(); // null unless returning from OAuth
+        if (fresh) {
           // persist before exposing the account — DCS ops resolve auth from the
-          // store, so setAuth must not outrun the write (else a sync fired right
-          // after the redirect races it and uses the previous/absent token)
-          await saveDcsAuth(a);
-          setAuth(a);
+          // store, so setAuth must not outrun the write
+          await saveDcsAuth(fresh);
+          setAuth(fresh);
+          return;
         }
-      })
-      .catch((err) => setAuthError(String(err.message || err)));
+      } catch (err) {
+        setAuthError(String(err.message || err));
+      }
+      const stored = await getDcsAuth();
+      if (stored) setAuth(stored);
+    })();
   }, []);
 
   const groups = useMemo(
     () => (checks ? { tn: groupChecks(checks.tn), tw: groupChecks(checks.tw) } : null),
     [checks],
   );
+
+  // Load a project's data into state (project, decisions, checks filtered to the
+  // uploaded verses, pins, alignments) without touching the route — so it can
+  // both open a project and refresh one in place after a sync pulled new source.
+  async function loadProjectData(id) {
+    const p = await getProject(id);
+    setProject(p);
+    setStates(await getCheckStates(id));
+    // imported tC4 projects check against their pinned resource versions
+    const projectPins = p.tc4 ? (await getBurrito(p.tc4.importId))?.pins || null : null;
+    setPins(projectPins);
+    // Load the original-language (UHB/UGNT) and ULT books in the background —
+    // together they power the English gloss of each quote, but checks shouldn't
+    // wait on them.
+    Promise.all([fetchOlUsfm(p.bookCode), fetchUltUsfm(p.bookCode)])
+      .then(([olUsfm, ultUsfm]) =>
+        setAlignments({ sourceBook: parseBook(olUsfm), targetBook: parseBook(ultUsfm) }),
+      )
+      .catch(() => {});
+    const [tnTsv, twlTsv] = await Promise.all([
+      fetchTnTsv(p.bookCode, projectPins?.translationNotes),
+      fetchTwlTsv(p.bookCode),
+    ]);
+    // partial-book support: only keep checks whose verse exists in the upload
+    const filter = (list) => list.filter((c) => getVerseText(p, c.chapter, c.verse) != null);
+    const tn = parseTnChecks(tnTsv);
+    const tw = parseTwChecks(twlTsv);
+    const tnKept = filter(tn);
+    const twKept = filter(tw);
+    setChecks({ tn: tnKept, tw: twKept });
+    setSkipped({ tn: tn.length - tnKept.length, tw: tw.length - twKept.length });
+  }
 
   async function openProject(id) {
     setRoute({ view: 'project' });
@@ -57,32 +94,7 @@ export function App() {
     setAlignments(null);
     setLoadError(null);
     try {
-      const p = await getProject(id);
-      setProject(p);
-      setStates(await getCheckStates(id));
-      // imported tC4 projects check against their pinned resource versions
-      const projectPins = p.tc4 ? (await getBurrito(p.tc4.importId))?.pins || null : null;
-      setPins(projectPins);
-      // Load the original-language (UHB/UGNT) and ULT books in the background —
-      // together they power the English gloss of each quote, but checks shouldn't
-      // wait on them.
-      Promise.all([fetchOlUsfm(p.bookCode), fetchUltUsfm(p.bookCode)])
-        .then(([olUsfm, ultUsfm]) =>
-          setAlignments({ sourceBook: parseBook(olUsfm), targetBook: parseBook(ultUsfm) }),
-        )
-        .catch(() => {});
-      const [tnTsv, twlTsv] = await Promise.all([
-        fetchTnTsv(p.bookCode, projectPins?.translationNotes),
-        fetchTwlTsv(p.bookCode),
-      ]);
-      // partial-book support: only keep checks whose verse exists in the upload
-      const filter = (list) => list.filter((c) => getVerseText(p, c.chapter, c.verse) != null);
-      const tn = parseTnChecks(tnTsv);
-      const tw = parseTwChecks(twlTsv);
-      const tnKept = filter(tn);
-      const twKept = filter(tw);
-      setChecks({ tn: tnKept, tw: twKept });
-      setSkipped({ tn: tn.length - tnKept.length, tw: tw.length - twKept.length });
+      await loadProjectData(id);
     } catch (err) {
       setLoadError(`Could not load checking resources: ${err.message || err}`);
     }
@@ -287,9 +299,13 @@ export function App() {
           skipped={skipped}
           pins={pins}
           onSynced={async () => {
-            // a sync may have merged remote decisions and linked a DCS repo
-            setProject(await getProject(project.id));
-            setStates(await getCheckStates(project.id));
+            // a sync may have merged remote decisions and pulled expanded source
+            // — reload everything (incl. the checklist) so counts aren't stale
+            try {
+              await loadProjectData(project.id);
+            } catch {
+              /* the sync itself succeeded; a refetch hiccup shouldn't surface here */
+            }
           }}
         />
       )}
