@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { login, startOAuth, OAUTH_CLIENT_ID } from '../lib/dcs';
 import { saveDcsAuth, clearDcsAuth } from '../lib/store';
+import { getActorId } from '../lib/journal';
 
 // Compact Door43 account panel, opened from the header. Auth only — the app
 // is fully usable signed-out; importing and per-project sync live with the
@@ -27,7 +28,7 @@ export function Door43Account({ auth, onAuthChange }) {
 
   const signInManual = () =>
     run(async () => {
-      const a = await login(username, password);
+      const a = await login(username, password, await getActorId());
       await saveDcsAuth(a);
       setPassword('');
       onAuthChange(a);

@@ -9,8 +9,9 @@ export const DCS_HOST = 'https://git.door43.org';
 const API = `${DCS_HOST}/api/v1`;
 
 // The per-app access token name, like tC3's 'translation-core'. Gitea only
-// reveals a token's secret at creation, so login deletes any stale one of
-// ours and creates a fresh token.
+// reveals a token's secret at creation, so login must create a fresh token —
+// it cannot re-read an existing one. The name is qualified per device (see
+// login) so a second device's sign-in doesn't revoke the first device's token.
 const TOKEN_NAME = 'tcore-checks-pwa';
 
 async function api(path, { token, basic, method = 'GET', body } = {}) {
@@ -141,9 +142,10 @@ export async function refreshOAuth(auth) {
 // ── Password / personal-access-token fallback ───────────────────────────────
 // Sign in with a Door43 username + password (or an existing access token
 // pasted as the password — tried first, so accounts with 2FA still work).
-// Zero-setup fallback when no OAuth client id is configured.
-// Returns {username, token, kind: 'pat'}.
-export async function login(username, secret) {
+// Zero-setup fallback when no OAuth client id is configured. `deviceLabel`
+// (a per-install id) qualifies the created token's name so devices don't
+// clobber each other's tokens. Returns {username, token, kind: 'pat'}.
+export async function login(username, secret, deviceLabel = '') {
   try {
     const user = await api('/user', { token: secret });
     if (user?.login?.toLowerCase() === username.trim().toLowerCase()) {
@@ -154,13 +156,17 @@ export async function login(username, secret) {
   }
   const basic = { username: username.trim(), password: secret };
   const user = await api('/user', { basic }); // 401 here = bad credentials
+  // Per-device token name: only ever delete THIS device's own previous token
+  // (avoids piling up tokens on repeat sign-ins) while leaving other devices'
+  // tokens — and their sync — intact.
+  const tokenName = deviceLabel ? `${TOKEN_NAME} (${deviceLabel})` : TOKEN_NAME;
   const tokens = await api(`/users/${user.login}/tokens`, { basic });
-  const stale = (tokens || []).find((t) => t.name === TOKEN_NAME);
+  const stale = (tokens || []).find((t) => t.name === tokenName);
   if (stale) await api(`/users/${user.login}/tokens/${stale.id}`, { basic, method: 'DELETE' });
   const created = await api(`/users/${user.login}/tokens`, {
     basic,
     method: 'POST',
-    body: { name: TOKEN_NAME, scopes: ['read:user', 'write:repository'] },
+    body: { name: tokenName, scopes: ['read:user', 'write:repository'] },
   });
   return { username: user.login, token: created.sha1, kind: 'pat' };
 }

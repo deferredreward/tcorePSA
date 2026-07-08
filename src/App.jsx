@@ -298,6 +298,7 @@ export function App() {
           states={states}
           skipped={skipped}
           pins={pins}
+          auth={auth}
           onSynced={async () => {
             // a sync may have merged remote decisions and pulled expanded source
             // — reload everything (incl. the checklist) so counts aren't stale

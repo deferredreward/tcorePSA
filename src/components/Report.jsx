@@ -4,7 +4,7 @@ import { groupTitle } from '../lib/titles';
 import { buildReportMarkdown, downloadText } from '../lib/report';
 import { exportBurrito } from '../lib/tc4';
 import { getActorId, getJournal } from '../lib/journal';
-import { getBurrito, getDcsAuth } from '../lib/store';
+import { getBurrito } from '../lib/store';
 import { syncProject } from '../lib/sync';
 import { isDone } from './CheckList';
 
@@ -73,14 +73,9 @@ function ToolReport({ tool, checks, states, pins }) {
   );
 }
 
-export function Report({ project, checks, states, skipped, pins, onSynced }) {
+export function Report({ project, checks, states, skipped, pins, auth, onSynced }) {
   const [exportError, setExportError] = useState(null);
-  const [auth, setAuth] = useState(null);
   const [syncMsg, setSyncMsg] = useState(null);
-
-  useEffect(() => {
-    getDcsAuth().then(setAuth);
-  }, []);
 
   // Sync with the linked Door43 repo (pull + merge + push); first sync
   // creates/links a repo under the signed-in account
