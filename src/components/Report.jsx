@@ -106,7 +106,10 @@ export function Report({ project, checks, states, skipped, pins, auth, onSynced 
         setUpgradeMsg(null);
         return;
       }
-      setUpgradeMsg(`✓ Upgraded → ${result.owner}/${result.repo}`);
+      setUpgradeMsg(
+        `✓ Upgraded → ${result.owner}/${result.repo}` +
+          (result.unmapped ? ` · ${result.unmapped} decision(s) need re-confirming at the current resource version` : ''),
+      );
       await onSynced?.();
     } catch (err) {
       setUpgradeMsg(`⚠ ${err.message || err}`);
@@ -172,7 +175,7 @@ export function Report({ project, checks, states, skipped, pins, auth, onSynced 
           </p>
           {auth ? (
             <div class="row">
-              {project.dcs && (
+              {project.dcs && project.dcs.owner?.toLowerCase() === auth.username?.toLowerCase() && (
                 <button class="secondary grow" disabled={upgrading} onClick={() => upgrade('in-place')}>
                   Upgrade this repo in place
                 </button>

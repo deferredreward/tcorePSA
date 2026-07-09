@@ -182,7 +182,10 @@ export function Home({ onOpen, auth }) {
       });
       setSyncStatus((s) => ({
         ...s,
-        [projectId]: result.cancelled ? '' : `✓ Upgraded → ${result.owner}/${result.repo}`,
+        [projectId]: result.cancelled
+          ? ''
+          : `✓ Upgraded → ${result.owner}/${result.repo}` +
+            (result.unmapped ? ` · ${result.unmapped} decision(s) need re-confirming` : ''),
       }));
       await refresh();
     } catch (err) {
@@ -323,7 +326,7 @@ export function Home({ onOpen, auth }) {
             )}
             {upgradeMenu === p.id && (
               <div class="row" style="margin-top:6px" onClick={(e) => e.stopPropagation()}>
-                {p.dcs && (
+                {p.dcs && p.dcs.owner?.toLowerCase() === auth.username?.toLowerCase() && (
                   <button
                     class="secondary"
                     style="padding:6px 10px"

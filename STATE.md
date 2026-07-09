@@ -119,8 +119,9 @@ The only place the app's two otherwise-isolated pipelines (tC3 read in `tc3.js`,
 `tc4.js`/`sync.js`) deliberately meet. Runs only on explicit user action.
 
 Two modes:
-- **Upgrade in place** — rewrite the SAME linked Door43 repo as a burrito. The tC3 marker files are
-  deleted (see below), burrito files committed, and the project re-pointed at that repo with
+- **Upgrade in place** — rewrite the SAME linked Door43 repo as a burrito. The tC3 *format markers*
+  are deleted (manifest.json, the USFM copies, the chapter json); the `.apps/` checkData is kept as a
+  safety net (see below). Burrito files are committed and the project re-pointed at that repo with
   `format: 'burrito'`. The repo stops being tC3; one-way.
 - **Export to a new repo** — `dcs.createRepo` a fresh personal repo under the signed-in user, push
   the burrito there (empty repo ⇒ all `create`, branch omitted so the first commit makes the default
@@ -140,19 +141,32 @@ Design decisions:
   was checked at v88 the check ids can differ at master and the just-migrated decisions would
   **silently fail to re-attach**. Carrying the pins keeps "same pins ⇒ same check ids ⇒ decisions
   line up". OL/lexicon stay unfoldingWord/master (tC3 pins neither; informational only).
-- **The tC3 `checkData` is intentionally DROPPED, and nothing is lost.** Every decision in
-  `.apps/translationCore/checkData/…` was seeded into the PWA states on import
-  (`seedStatesFromDecisions`), and `buildBurritoFiles` re-emits those as the burrito's
-  `checking/<tool>/<BOOK>.json` decision sidecars — the burrito's native decision carrier. The
-  upgrade test asserts both OBA decisions ("go whup", the aside) survive into the sidecar with
-  `status: valid` and the v88 pin. So the drop is a format change, not a data loss.
-- **In-place delete is positive-identification only.** `isTc3Artifact` removes exactly the tC3
-  layout (`manifest.json`, `.apps/**`, root-level `*.usfm`, the chapter-split `<book>/N.json`) —
-  never a catch-all "delete everything else" — so a user's `LICENSE`/`README` survive, and anything
-  missed is harmless because `detectProjectFormat` prefers `metadata.json ⇒ burrito`. Existing files
-  that a burrito path also writes (e.g. `.gitignore`) are `update` (with the tree's blob sha), not
-  `create`. In-place refuses if the linked repo isn't owned by the signed-in user (can only
-  create/rewrite under yourself).
+- **Decisions ride into the burrito's `checking/` sidecars — but the checkData is NOT dropped
+  blindly.** Each tC3 decision was seeded into PWA states on import, and `buildBurritoFiles` re-emits
+  the states as `checking/<tool>/<BOOK>.json` records. The catch (found in the PR#12 code review):
+  `buildBurritoFiles`→`mergeDecisions` only emits a decision whose check **id still resolves at the
+  fetched resource version**, and (a) tW is always fetched at `en_twl` **master** (no pin support
+  yet), (b) pre-checkId tC3 projects seed nothing, (c) a decision on a verse outside the draft is
+  filtered by `loadChecks`. So the burrito can silently omit decisions. Two guards make "nothing is
+  lost" true rather than aspirational:
+  1. The source is never destroyed — **new-repo** leaves the tC3 repo untouched; **in-place**
+     PRESERVES `.apps/` checkData (`isTc3FormatMarker` deletes only the format markers, NOT `.apps/`).
+     A leftover `.apps/` is harmless: `detectProjectFormat` prefers `metadata.json ⇒ burrito`, and
+     burrito sync round-trips unmodeled files verbatim.
+  2. `upgradeTc3ToBurrito` counts decided states whose id isn't in the fetched lists (`unmapped` in
+     the result) and the UI surfaces it ("N decision(s) need re-confirming") instead of a silent
+     clean success. The upgrade test asserts the OBA tN decisions ("go whup", the aside) survive with
+     `status: valid` + the v88 pin, and `unmapped === 0` for that fixture.
+- **In-place delete is positive-identification of FORMAT markers only.** `isTc3FormatMarker` removes
+  exactly `manifest.json`, root-level `*.usfm`, and the chapter-split `<book>/N.json` — never `.apps/`
+  and never a catch-all "delete everything else" — so a user's `LICENSE`/`README` (and the checkData
+  safety net) survive. Existing files a burrito path also writes (e.g. `.gitignore`) are `update`
+  (with the tree's blob sha), not `create`.
+- **In-place robustness.** Refuses if the linked repo isn't owned by the signed-in user (both the
+  server guard and the UI hide the in-place button for non-owned repos); `getRepo`-checks that the
+  repo still exists and resolves its **real default branch** (a stale `master`/`main` link would
+  otherwise look like an empty repo and push existing paths as `create` → 422). new-repo `getRepo`-
+  checks the target name first so a collision is a clear error, not a raw 409.
 - **`format` transition.** On success the project is saved with `format: 'burrito'`,
   `tc4: { importId, book }` (so `App.loadProjectData` reads pins/metadata from the stored burrito
   context, exactly like a natively-imported burrito), the new `dcs` link, and the now-orphaned
@@ -171,9 +185,12 @@ Live verification — DONE (2026-07-08, against real git.door43.org as `@benjami
   `create`, no branch); **in-place** = seed a tC3-shaped repo, then a create/update/delete batch
   commit. Each verified by re-downloading the archive and re-importing: the tree re-imports as a
   burrito, the tC3 v88 pins are carried, and both OBA decisions ("go whup" / the aside) survive and
-  re-attach. In-place confirmed the tC3 markers (`manifest.json`, `.apps/**`, `oba.usfm`, `oba/1.json`)
-  were deleted, `LICENSE.md` was preserved, and an existing `.gitignore` was `update`d (not `create`d).
-  Both test repos were deleted afterward. 15/15 checks passed.
+  re-attach. `LICENSE.md` was preserved and an existing `.gitignore` was `update`d (not `create`d).
+  Both test repos were deleted afterward. 15/15 checks passed. NOTE: this live run exercised the
+  pre-code-review delete-set (which deleted `.apps/**`); the subsequent PR#12-review change to
+  PRESERVE `.apps/` checkData in-place (see the checkData design decision above) is covered by the
+  `upgrade.test.js` unit test, not re-run live — the DCS write primitives it depends on
+  (create/update/delete batch, tree, archive) are unchanged and were what the live run validated.
 - **This was the first live exercise of the authenticated DCS write path and it surfaced a real bug:**
   `POST /user/repos` (`dcs.createRepo`) requires the **`write:user`** scope, but `login()` was minting
   per-app tokens with only `['read:user', 'write:repository']` — so first-sync repo creation (and this

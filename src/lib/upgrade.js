@@ -4,9 +4,11 @@
 //
 // This is the ONLY place the two formats meet, and it only ever runs on an
 // explicit user action. Two modes:
-//   'in-place' — rewrite the SAME linked Door43 repo as a burrito (the repo
-//                stops being tC3; the tC3 marker files are deleted). The
-//                project is re-pointed at that repo with format 'burrito'.
+//   'in-place' — rewrite the SAME linked Door43 repo as a burrito. The tC3
+//                FORMAT markers (manifest.json, the USFM copies, the chapter
+//                json) are deleted; the `.apps/` checkData is PRESERVED as a
+//                safety net (see isTc3FormatMarker). The project is re-pointed
+//                at that repo with format 'burrito'.
 //   'new-repo' — create a fresh personal repo under the signed-in user, push
 //                the burrito there, and leave the original tC3 repo untouched.
 //                The project is re-linked to the new repo with format 'burrito'.
@@ -19,20 +21,22 @@
 // resources.json so the tC3 manifest's resource pins survive the upgrade (see
 // resourcesFromTc3 below for why that matters).
 //
-// The tC3 checkData (`.apps/translationCore/checkData/…`) is intentionally
-// DROPPED, not carried across: every decision in it was seeded into the PWA
-// states on import, and buildBurritoFiles re-emits those as the burrito's
-// checking/ decision sidecars. See STATE.md "tC3→Burrito upgrade".
+// The burrito's checking/ sidecars carry every decision whose check id still
+// resolves at the fetched resource versions. Some may NOT (tW is fetched at
+// en_twl master with no pin; pre-checkId projects seed nothing), so the upgrade
+// (a) counts them (`unmapped` in the result) instead of reporting a silent
+// clean success, and (b) never destroys the source: new-repo leaves the tC3
+// repo untouched, in-place keeps the `.apps/` checkData. See STATE.md.
 //
 // Pure-ish module: DCS calls + IndexedDB store, no DOM. The UI passes a
 // promptRepoName callback for the new-repo name (mirrors syncProject).
 
 import { buildBurritoFiles } from './tc4';
 import * as dcs from './dcs';
-import { loadChecks, ensureFreshAuth } from './sync';
+import { loadChecks, ensureFreshAuth, contextFromFiles } from './sync';
 import { getProject, saveProject, getCheckStates, saveBurrito, getDcsAuth } from './store';
 import { getActorId, getJournal } from './journal';
-import { strToU8, strFromU8 } from 'fflate';
+import { strToU8 } from 'fflate';
 
 // Build a burrito checking/resources.json (BURRITO-SPEC §5.3) from the tC3
 // project's manifest-derived pins. WHY this matters: on reload (and on any
@@ -78,33 +82,28 @@ function resourcesFromTc3(pins) {
   };
 }
 
-// A path in the linked repo that identifies it as a tC3 project and has no
-// place in a burrito, so an in-place upgrade removes it. Positive
-// identification only (never a catch-all "delete everything else") so we can't
-// destroy unrelated files a user added (LICENSE, README); anything we miss is
-// harmless because detectProjectFormat prefers metadata.json ⇒ burrito. Layout
-// per tc3.js: root manifest.json, root <book>.usfm (+ repo-named copy),
-// .apps/translationCore/…, and the redundant chapter-split <book>/N.json dir.
-function isTc3Artifact(path, bookCode) {
+// A path that defines the repo's tC3 FORMAT and has no place in a burrito, so
+// an in-place upgrade removes it. Deliberately the format markers ONLY — the
+// root manifest.json, the root/repo-named USFM copies, and the redundant
+// chapter-split <book>/N.json — and NOT `.apps/translationCore/…`.
+//
+// The `.apps/` checkData is the authoritative record of every checking decision
+// the project ever made, and the burrito's checking/ sidecars only carry
+// decisions whose check ids still resolve at the fetched resource versions —
+// tW is always fetched at en_twl master (no pin support yet), and pre-checkId
+// projects seed nothing. So the burrito can silently omit decisions, and
+// deleting the checkData would make that loss permanent. In-place therefore
+// PRESERVES `.apps/` as an unmodeled leftover: harmless (detectProjectFormat
+// prefers metadata.json ⇒ burrito, and burrito sync round-trips unmodeled files
+// verbatim) and a guaranteed safety net. Positive-ID only, so a user's
+// LICENSE/README also survive.
+function isTc3FormatMarker(path, bookCode) {
   const book = String(bookCode || '').toLowerCase();
   return (
     path === 'manifest.json' ||
-    path.startsWith('.apps/') ||
-    /^[^/]+\.usfm$/i.test(path) || // root-level USFM (burrito USFM is ingredients/<BOOK>.usfm)
+    /^[^/]+\.usfm$/i.test(path) || // root-level USFM copies (burrito USFM is ingredients/<BOOK>.usfm)
     (!!book && path.startsWith(`${book}/`)) // chapter-split verse json
   );
-}
-
-// Turn the generated burrito file map into the stored import context the rest
-// of the app consumes (App.loadProjectData reads pins from here).
-function contextFromFiles(files, resources) {
-  const read = (p) => (files[p] ? JSON.parse(strFromU8(files[p])) : null);
-  return {
-    metadata: read('metadata.json'),
-    files,
-    pins: resources.resources,
-    settings: read('ingredients/checking/settings.json'),
-  };
 }
 
 // Convert an imported tC3 project (project.format === 'tc3') to a Scripture
@@ -127,25 +126,43 @@ export async function upgradeTc3ToBurrito(projectId, auth, { mode = 'new-repo', 
   const book = project.bookCode.toUpperCase();
 
   // ---- build the burrito files from the tC3 project + seeded states ----
-  const states = await getCheckStates(project.id);
-  // Fetch the check lists at the tC3 pins so their ids match the seeded
-  // decisions' checkIds (the whole point of carrying the pins forward).
-  const { tn, tw } = await loadChecks(project, project.pins);
+  // These four are independent: the check-list fetch (loadChecks, the network
+  // one) runs alongside the IndexedDB reads rather than serialized around them.
+  // loadChecks fetches at the tC3 pins so tN ids match the seeded decisions'
+  // checkIds (the point of carrying the pins forward).
+  const [states, { tn, tw }, actorId, events] = await Promise.all([
+    getCheckStates(project.id),
+    loadChecks(project, project.pins),
+    getActorId(),
+    getJournal(project.id),
+  ]);
   const resources = resourcesFromTc3(project.pins);
-  const burritoContext = {
-    // ONLY the resources sidecar — no tC3 files — so buildBurritoFiles emits a
-    // clean fresh burrito that is nonetheless correctly pinned.
-    files: { 'ingredients/checking/resources.json': strToU8(JSON.stringify(resources, null, 2) + '\n') },
-    pins: resources.resources,
-    metadata: null, // → fresh burrito metadata (generator = the PWA)
-  };
   const files = buildBurritoFiles({
     project,
-    burrito: burritoContext,
+    // ONLY the resources sidecar — no tC3 files — so buildBurritoFiles emits a
+    // clean fresh burrito that is nonetheless correctly pinned.
+    burrito: {
+      files: { 'ingredients/checking/resources.json': strToU8(JSON.stringify(resources, null, 2) + '\n') },
+      pins: resources.resources,
+      metadata: null, // → fresh burrito metadata (generator = the PWA)
+    },
     checks: { tn, tw },
     states,
-    journal: { actorId: await getActorId(), events: await getJournal(project.id) },
+    journal: { actorId, events },
   });
+
+  // A decided state whose check id isn't in the freshly-fetched lists can't be
+  // written into the burrito — mergeDecisions only emits decisions for a check
+  // it can match (tc4.js). This happens when the fetched resource differs from
+  // what the project was checked against — notably tW, always fetched at en_twl
+  // master (no pin support yet). Count them so the upgrade never reports a clean
+  // success while quietly omitting work; nothing is *lost* (new-repo leaves the
+  // source repo untouched; in-place preserves .apps/ — see isTc3FormatMarker),
+  // but those checks need re-confirming against the current resource.
+  const fetchedIds = new Set([...tn, ...tw].map((c) => c.id));
+  const unmapped = Object.entries(states).filter(
+    ([id, s]) => (s.selections?.length || s.comment || s.reminder || s.nothingToSelect) && !fetchedIds.has(id),
+  ).length;
 
   // ---- resolve the target repo and commit ----
   let owner, repo, branch, lastSha, deleted = 0;
@@ -154,10 +171,19 @@ export async function upgradeTc3ToBurrito(projectId, auth, { mode = 'new-repo', 
       throw new Error('This project has no linked Door43 repo to upgrade in place — use “Export to a new repo” instead.');
     }
     ({ owner, repo } = project.dcs);
-    branch = project.dcs.branch || 'master';
     if (owner.toLowerCase() !== auth.username.toLowerCase()) {
       throw new Error(`Can only rewrite a repo you own — ${owner}/${repo} belongs to ${owner}. Use “Export to a new repo” instead.`);
     }
+    // Confirm the repo still exists and resolve its real default branch: a stale
+    // link (repo deleted/renamed, or default branch is 'main' not 'master')
+    // would otherwise make getBranchSha return null — indistinguishable from an
+    // empty repo — and the commit would push existing paths as 'create' (422)
+    // while skipping the tC3-marker deletes.
+    const repoInfo = await dcs.getRepo(owner, repo, auth.token);
+    if (!repoInfo) {
+      throw new Error(`${owner}/${repo} no longer exists on Door43 — use “Export to a new repo” instead.`);
+    }
+    branch = project.dcs.branch || repoInfo.default_branch || 'master';
     const remoteSha = await dcs.getBranchSha(owner, repo, branch, auth.token);
     const tree = remoteSha ? await dcs.getTree(owner, repo, remoteSha, auth.token) : {};
     const changes = [];
@@ -169,9 +195,10 @@ export async function upgradeTc3ToBurrito(projectId, auth, { mode = 'new-repo', 
           : { operation: 'create', path, content: dcs.toBase64(data) },
       );
     }
-    // delete tC3 markers we positively identify and aren't already overwriting
+    // delete the tC3 format markers we positively identify and aren't already
+    // overwriting (the .apps/ checkData is deliberately kept — see isTc3FormatMarker)
     for (const [path, sha] of Object.entries(tree)) {
-      if (files[path] || !isTc3Artifact(path, project.bookCode)) continue;
+      if (files[path] || !isTc3FormatMarker(path, project.bookCode)) continue;
       changes.push({ operation: 'delete', path, sha });
       deleted++;
     }
@@ -192,6 +219,11 @@ export async function upgradeTc3ToBurrito(projectId, auth, { mode = 'new-repo', 
     const defaultName = `${project.bookCode.toLowerCase()}_checks`;
     const name = (repoName || (promptRepoName ? promptRepoName(defaultName) : defaultName) || '').trim();
     if (!name) return { cancelled: true };
+    // Fail early and clearly on a name collision rather than letting createRepo
+    // surface a raw 409 (also catches a retry after a create-then-commit failure).
+    if (await dcs.getRepo(auth.username, name, auth.token)) {
+      throw new Error(`A repo named “${name}” already exists under @${auth.username} — pick a different name.`);
+    }
     const created = await dcs.createRepo(name, auth.token);
     owner = created?.owner?.login || auth.username;
     repo = created?.name || name;
@@ -214,7 +246,7 @@ export async function upgradeTc3ToBurrito(projectId, auth, { mode = 'new-repo', 
   // Store the burrito context so App.loadProjectData reads pins/metadata from
   // it (via project.tc4.importId), exactly like a natively-imported burrito.
   const importId = `imp-${Date.now()}`;
-  await saveBurrito(importId, contextFromFiles(files, resources));
+  await saveBurrito(importId, contextFromFiles(files));
   const upgraded = {
     ...project,
     format: 'burrito',
@@ -233,5 +265,6 @@ export async function upgradeTc3ToBurrito(projectId, auth, { mode = 'new-repo', 
     repoUrl: `${dcs.DCS_HOST}/${owner}/${repo}`,
     pushed: Object.keys(files).length,
     deleted,
+    unmapped,
   };
 }

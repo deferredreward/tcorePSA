@@ -13,6 +13,12 @@ import { seedStatesFromDecisions } from './tc4.js';
 const commitFiles = vi.fn(() => ({ commit: { sha: 'committed-sha' } }));
 const createRepo = vi.fn((name) => ({ name, owner: { login: 'testuser' }, default_branch: 'master' }));
 const getBranchSha = vi.fn(() => 'remote-sha');
+// getRepo: the in-place link (en_rnb_oba_book) exists; any other name (a new
+// repo) is available (null). Lets both the new-repo collision pre-check and the
+// in-place existence check resolve.
+const getRepo = vi.fn((owner, repo) =>
+  repo === 'en_rnb_oba_book' ? { name: repo, owner: { login: owner }, default_branch: 'master' } : null,
+);
 // a realistic tC3 repo tree: markers to delete + a .gitignore that will be
 // overwritten + neutral files that must survive
 const getTree = vi.fn(() => ({
@@ -31,6 +37,7 @@ vi.mock('./dcs', () => ({
   commitFiles: (...a) => commitFiles(...a),
   getBranchSha: (...a) => getBranchSha(...a),
   getTree: (...a) => getTree(...a),
+  getRepo: (...a) => getRepo(...a),
   toBase64: () => 'BASE64',
 }));
 
@@ -43,6 +50,12 @@ const TN_CHECKS = [
 vi.mock('./sync', () => ({
   ensureFreshAuth: (a) => a,
   loadChecks: () => ({ tn: TN_CHECKS, tw: [], skipped: { tn: 0, tw: 0 } }),
+  // faithful to sync.js's real contextFromFiles (pins read from resources.json)
+  contextFromFiles: (files) => {
+    const read = (p) => (files[p] ? JSON.parse(strFromU8(files[p])) : null);
+    const resources = read('ingredients/checking/resources.json');
+    return { metadata: read('metadata.json'), files, pins: resources?.resources || null, settings: read('ingredients/checking/settings.json') };
+  },
 }));
 
 vi.mock('./journal', () => ({ getActorId: () => 'pwa-testactor', getJournal: () => [] }));
@@ -153,6 +166,20 @@ describe('upgradeTc3ToBurrito — new repo', () => {
     expect(paths).toContain('ingredients/OBA.usfm');
     expect(paths).toContain('ingredients/checking/resources.json');
     expect(paths).toContain('ingredients/checking/translationNotes/OBA.json');
+    // OBA fixture: both tN decisions map to fetched checks, tw empty → none unmapped
+    expect(result.unmapped).toBe(0);
+  });
+
+  it('refuses (clear error) when the target repo name already exists', async () => {
+    const { project, states } = tc3Project();
+    store.projects[project.id] = project;
+    store.states[project.id] = states;
+    // getRepo mock returns a repo for 'en_rnb_oba_book' → simulate a collision
+    await expect(
+      upgradeTc3ToBurrito(project.id, null, { mode: 'new-repo', repoName: 'en_rnb_oba_book' }),
+    ).rejects.toThrow(/already exists/i);
+    expect(createRepo).not.toHaveBeenCalled();
+    expect(store.projects[project.id].format).toBe('tc3'); // untouched
   });
 
   it('carries the tC3 resource pins into resources.json (so check ids keep matching)', async () => {
@@ -231,11 +258,12 @@ describe('upgradeTc3ToBurrito — in place', () => {
     expect(payload.branch).toBe('master'); // existing repo → target its branch
 
     const byPath = Object.fromEntries(payload.files.map((f) => [f.path, f]));
-    // tC3 markers deleted
+    // tC3 FORMAT markers deleted
     expect(byPath['manifest.json'].operation).toBe('delete');
     expect(byPath['oba.usfm'].operation).toBe('delete');
     expect(byPath['oba/1.json'].operation).toBe('delete');
-    expect(byPath['.apps/translationCore/checkData/selections/oba/1/1/x.json'].operation).toBe('delete');
+    // .apps/ checkData PRESERVED (safety net) — not in the commit at all
+    expect(byPath['.apps/translationCore/checkData/selections/oba/1/1/x.json']).toBeUndefined();
     // neutral files untouched (not in the commit at all)
     expect(byPath['LICENSE.md']).toBeUndefined();
     expect(byPath['README.md']).toBeUndefined();
@@ -245,7 +273,22 @@ describe('upgradeTc3ToBurrito — in place', () => {
     // burrito files created
     expect(byPath['metadata.json'].operation).toBe('create');
     expect(byPath['ingredients/OBA.usfm'].operation).toBe('create');
-    expect(result.deleted).toBe(4);
+    expect(result.deleted).toBe(3); // manifest.json, oba.usfm, oba/1.json
+  });
+
+  it('preserves the tC3 repo when it is not owned by the signed-in user', async () => {
+    const { project, states } = tc3Project({ owner: 'someone-else', repo: 'en_rnb_oba_book', branch: 'master' });
+    store.projects[project.id] = project;
+    store.states[project.id] = states;
+    await expect(upgradeTc3ToBurrito(project.id, null, { mode: 'in-place' })).rejects.toThrow(/own/i);
+    expect(commitFiles).not.toHaveBeenCalled();
+  });
+
+  it('refuses in-place when the linked repo no longer exists', async () => {
+    const { project, states } = tc3Project({ owner: 'testuser', repo: 'gone_repo', branch: 'master' });
+    store.projects[project.id] = project;
+    store.states[project.id] = states;
+    await expect(upgradeTc3ToBurrito(project.id, null, { mode: 'in-place' })).rejects.toThrow(/no longer exists/i);
   });
 
   it('refuses in-place when the project has no linked repo', async () => {
