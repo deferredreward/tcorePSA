@@ -265,10 +265,13 @@ Resolved:
   dropped). `fetchTwlTsv(bookCode, pin)` now takes the tW pin (mirroring `fetchTnTsv`), and
   `loadChecks` threads `pins.translationWords` through it — so the loaded tW checkIds match the
   seeded/keyed ones and the emitted `gatewayLanguageCode` agrees with the contextId. Covered by
-  the es-419 / Door43-Catalog case in `scripts/test-tc3.mjs` and the pin-threading assertion in
-  `src/lib/sync.loadchecks.test.js`. The burrito path is unaffected: BURRITO-SPEC §5.3 still has no
-  TWL-list pin slot (feedback item 2 above), so a burrito's tW pin is absent and `fetchTwlTsv`
-  falls back to master as before. Flagged by the PR #11 independent review.
+  the es-419 / Door43-Catalog case in `scripts/test-tc3.mjs`, the pin-threading assertion in
+  `src/lib/sync.loadchecks.test.js`, and the URL-construction test in `src/lib/door43.test.js`.
+  BURRITO-SPEC §5.3 has no dedicated TWL-*list* pin slot (feedback item 2 above) — the
+  `translationWords` pin names the `_tw` *articles* repo — so `fetchTwlTsv` derives the matching
+  `_twl` list repo (same owner/GL/version) from that pin. English resolves to `en_twl` exactly as
+  before; a non-en project (tC3 or burrito) now pins its TWL list correctly. Flagged by the PR #11
+  independent review.
 
 Known gaps / follow-ups:
 - **`syncTc3Project` itself (store + `loadChecks` wiring) is exercised only in-app**, not in the

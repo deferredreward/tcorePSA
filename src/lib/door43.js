@@ -36,8 +36,15 @@ export function fetchTnTsv(bookCode, pin) {
   return fetchCached(pinnedUrl(pin, 'en_tn', `tn_${bookCode}.tsv`));
 }
 
+// The TWL *list* (twl_<book>.tsv) lives in the `_twl` repo, but the project's
+// translationWords pin names the `_tw` *articles* repo (same owner/GL/version —
+// §5.3 has no dedicated TWL-list slot). Derive the list repo from that pin so a
+// non-en tW GL loads its TWL from the matching release; unpinned -> en_twl master.
 export function fetchTwlTsv(bookCode, pin) {
-  return fetchCached(pinnedUrl(pin, 'en_twl', `twl_${bookCode}.tsv`));
+  const listPin = pin?.repoPath
+    ? { ...pin, repoPath: pin.repoPath.replace(/_tw$/, '_twl') }
+    : pin;
+  return fetchCached(pinnedUrl(listPin, 'en_twl', `twl_${bookCode}.tsv`));
 }
 
 // rcLink like rc://*/tw/dict/bible/kt/faith -> bible/kt/faith.md
