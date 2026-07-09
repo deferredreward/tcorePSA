@@ -308,6 +308,12 @@ const burrito = { metadata: imp.metadata, files: imp.files, pins: imp.pins, sett
       { word: 'אִם', occurrence: 2 }, { word: '־', occurrence: 3 }, { word: 'שׁ֣וֹדְדֵי', occurrence: 1 },
       { word: 'לַ֔יְלָה', occurrence: 1 },
     ]));
+  // A quote using the older literal "..." discontinuity spelling must fold to the
+  // same bare {word:'…'} marker as "&" (tC folds "..." -> "…" before tokenizing),
+  // else it tokenizes to three "." tokens and never matches tC group data.
+  check('fresh: quoteToArray folds "..." to the ellipsis marker like "&"',
+    deepEq(quoteToArray('χάρις ... εἰρήνη'), quoteToArray('χάρις & εἰρήνη')) &&
+    deepEq(quoteToArray('χάρις ... εἰρήνη'), [{ word: 'χάρις', occurrence: 1 }, { word: '…' }, { word: 'εἰρήνη', occurrence: 1 }]));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

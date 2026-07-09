@@ -56,10 +56,14 @@ function keyOfCheck(check, book) {
 }
 
 // Quote normalization for quoteString verification: zero-width spaces out,
-// TSV "&" and ellipsis are the same discontinuity separator
+// the three discontinuity spellings unified to one "…". tC treats "&" (TSV
+// break char), literal "..." and "…" alike (tsv-groupdata-parser rewrites "&"
+// then getWordOccurrencesForQuote / the quoteString both fold "..." to "…"), so
+// we fold all three here — otherwise quoteToArray would tokenize a "..." quote
+// into three "." tokens and never deep-equal tC's group data.
 export function normalizeQuote(quote) {
   const s = Array.isArray(quote) ? quote.map((w) => w.word).join(' ') : String(quote || '');
-  return s.replace(/​/g, '').replace(/\s*&\s*/g, ' … ').replace(/\s+/g, ' ').trim();
+  return s.replace(/​/g, '').replace(/\s*&\s*/g, ' … ').replace(/\.\.\./g, '…').replace(/\s+/g, ' ').trim();
 }
 
 // tN quote string -> [{word, occurrence}] array, tokenized EXACTLY as tC's group
