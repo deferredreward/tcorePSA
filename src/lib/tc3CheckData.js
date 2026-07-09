@@ -124,8 +124,14 @@ export function buildTc3CheckDataFiles({ book, checks, states, remoteStates = {}
       files[path] = jsonBytes({ contextId, ...fields, modifiedTimestamp: stamp });
     };
 
+    // Emit a selections file when the decision changed AND either side is/was
+    // decided. The "was decided" case is a CLEAR: the user un-selected a check
+    // that the remote still records as done — tC3 un-sets it by writing an
+    // empty-selections file (newest-wins), so suppressing it would leave the
+    // verse stuck "done" on the remote. Both-undecided never emits (no change).
+    const decided = (s) => !!((s?.selections && s.selections.length) || s?.nothingToSelect);
     const selectionsChanged = !sameSelections(ls, rs) || !!ls.nothingToSelect !== !!rs?.nothingToSelect;
-    if (selectionsChanged && ((ls.selections && ls.selections.length) || ls.nothingToSelect)) {
+    if (selectionsChanged && (decided(ls) || decided(rs))) {
       emit('selections', {
         selections: normSelections(ls.selections),
         nothingToSelect: !!ls.nothingToSelect,

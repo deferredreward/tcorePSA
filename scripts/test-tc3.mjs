@@ -133,6 +133,21 @@ check('round-trip: selection, comment, reminder survive the write -> read cycle'
     JSON.parse(strFromU8(delta[deltaPaths[0]])).text === 'changed my mind');
 }
 
+// ---------- 5b. clearing a selection writes an empty-selections file (un-set) ----------
+{
+  // remote records the check as done; locally the user un-selects it
+  const remoteStates = seedStatesFromDecisions(importTc3(zip).decisions); // has tn-1:1-jd1r done
+  const cleared = { 'tn-1:1-jd1r': { selections: [], comment: remoteStates['tn-1:1-jd1r'].comment, reminder: remoteStates['tn-1:1-jd1r'].reminder, nothingToSelect: false, invalidated: false, modifiedAt: '2026-07-08T21:00:00.000Z' } };
+  const out = buildTc3CheckDataFiles({ book: 'OBA', checks, states: cleared, remoteStates, username: 'x', pins });
+  const selPaths = Object.keys(out).filter((p) => p.includes('/selections/'));
+  check('clear: un-selecting a remotely-done check writes an empty-selections file',
+    selPaths.length === 1 && (() => { const r = JSON.parse(strFromU8(out[selPaths[0]])); return r.selections.length === 0 && r.nothingToSelect === false; })());
+
+  // a check that was never decided on either side emits nothing (no spurious clear)
+  const undecided = { 'tw-1:1-ab12': { selections: [], comment: '', reminder: false, nothingToSelect: false, invalidated: false, modifiedAt: '2026-07-08T21:00:00.000Z' } };
+  check('clear: a never-decided check emits no file', Object.keys(buildTc3CheckDataFiles({ book: 'OBA', checks, states: undecided, remoteStates: {}, username: 'x', pins })).length === 0);
+}
+
 // ---------- 5. tW selection + same-verse+category filename-collision handling ----------
 {
   const st = {

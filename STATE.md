@@ -155,6 +155,10 @@ Design decisions:
   decision already on the remote re-imports identically, so nothing is re-appended. The final git
   blob-sha diff (reused from sync.js) is a secondary guard; tC3 files are almost always fresh
   `create`s since their filenames are timestamped.
+- **Clearing a decision is written back** (not just set/edit). Un-selecting a check the remote still
+  records as done emits an empty-selections file (`selections: []`, `nothingToSelect: false`) — tC3's
+  own un-set, newest-wins — rather than suppressing the write and leaving the verse stuck "done".
+  Both-undecided still emits nothing. (Found by both the built-in and Codex reviews of PR #11.)
 - **Filename-collision guard.** Two checks in the same verse+category sharing a `modifiedAt` would
   collide on filename; the builder bumps the millisecond (keeping a valid ISO stamp) so each gets a
   distinct file. Rare, but two seeded decisions can share an import timestamp.
