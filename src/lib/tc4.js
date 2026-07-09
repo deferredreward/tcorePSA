@@ -212,14 +212,18 @@ function recordFromCheck(check, state, tool, book) {
 }
 
 function decisionFieldsFromState(state) {
+  // A state still flagged invalidated (imported as needs-re-review and not yet
+  // re-decided) must round-trip as invalid, not silently become valid — the
+  // seeder maps status:'invalid' back to invalidated. A fresh in-app decision
+  // clears state.invalidated (App.onSaveState) before it ever reaches here.
   return {
     selections: state.selections?.length ? normalizeSelections(state.selections) : false,
     comments: state.comment ? state.comment : false,
     reminders: !!state.reminder,
     nothingToSelect: !!state.nothingToSelect,
     verseEdits: false,
-    invalidated: false,
-    status: isDoneState(state) ? 'valid' : 'todo',
+    invalidated: !!state.invalidated,
+    status: state.invalidated ? 'invalid' : isDoneState(state) ? 'valid' : 'todo',
     modifiedTimestamp: state.modifiedAt || new Date().toISOString(),
   };
 }

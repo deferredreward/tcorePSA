@@ -102,7 +102,9 @@ function isTc3FormatMarker(path, bookCode) {
   return (
     path === 'manifest.json' ||
     /^[^/]+\.usfm$/i.test(path) || // root-level USFM copies (burrito USFM is ingredients/<BOOK>.usfm)
-    (!!book && path.startsWith(`${book}/`)) // chapter-split verse json
+    // chapter-split verse json ONLY (<book>/<chapter>.json) — NOT every path
+    // under <book>/, so a user's oba/notes.md or oba/assets/… is never deleted
+    (!!book && new RegExp(`^${book}/\\d+\\.json$`).test(path))
   );
 }
 
@@ -185,6 +187,15 @@ export async function upgradeTc3ToBurrito(projectId, auth, { mode = 'new-repo', 
     }
     branch = project.dcs.branch || repoInfo.default_branch || 'master';
     const remoteSha = await dcs.getBranchSha(owner, repo, branch, auth.token);
+    // Refuse if the repo moved on since import: an in-place rewrite builds from
+    // the LOCAL (import-time) usfmText/states and would clobber whatever landed
+    // remotely (tC3 has no pull/merge path — that's the burrito pipeline). Steer
+    // to a fresh re-import or new-repo instead of silently overwriting.
+    if (remoteSha && project.dcs.lastSha && remoteSha !== project.dcs.lastSha) {
+      throw new Error(
+        `${owner}/${repo} has changed on Door43 since you imported it — re-import it, or use “Export to a new repo”, before upgrading in place.`,
+      );
+    }
     const tree = remoteSha ? await dcs.getTree(owner, repo, remoteSha, auth.token) : {};
     const changes = [];
     for (const [path, data] of Object.entries(files)) {

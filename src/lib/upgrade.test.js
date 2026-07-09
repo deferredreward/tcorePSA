@@ -25,6 +25,7 @@ const getTree = vi.fn(() => ({
   'manifest.json': 'sha-man',
   'oba.usfm': 'sha-usfm',
   'oba/1.json': 'sha-ch1',
+  'oba/notes.md': 'sha-notes', // a user file under <book>/ — must NOT be deleted
   '.apps/translationCore/checkData/selections/oba/1/1/x.json': 'sha-cd',
   '.gitignore': 'sha-gi',
   'LICENSE.md': 'sha-lic',
@@ -214,6 +215,20 @@ describe('upgradeTc3ToBurrito — new repo', () => {
     expect(usfm).not.toContain('\\zaln');
   });
 
+  it('carries a tC3 invalidated (needs-re-review) decision as status invalid, not valid', async () => {
+    const { project, states } = tc3Project();
+    states['tn-1:1-jd1r'].invalidated = true; // imported as needs-re-review, not re-decided
+    store.projects[project.id] = project;
+    store.states[project.id] = states;
+    await upgradeTc3ToBurrito(project.id, null, { mode: 'new-repo', repoName: 'oba_burrito' });
+
+    const ctx = store.burritos[Object.keys(store.burritos)[0]];
+    const tn = JSON.parse(strFromU8(ctx.files['ingredients/checking/translationNotes/OBA.json']));
+    const r = tn.decisions.find((d) => d.contextId.checkId === 'jd1r');
+    expect(r.status).toBe('invalid'); // not silently revalidated
+    expect(r.invalidated).toBe(true);
+  });
+
   it('flips the project to the burrito pipeline and drops the tC3 pins', async () => {
     const { project, states } = tc3Project();
     store.projects[project.id] = project;
@@ -240,7 +255,7 @@ describe('upgradeTc3ToBurrito — new repo', () => {
 });
 
 describe('upgradeTc3ToBurrito — in place', () => {
-  const LINK = { owner: 'testuser', repo: 'en_rnb_oba_book', branch: 'master' };
+  const LINK = { owner: 'testuser', repo: 'en_rnb_oba_book', branch: 'master', lastSha: 'remote-sha' };
 
   it('rewrites the linked repo: deletes tC3 markers, keeps neutral files, updates existing', async () => {
     const { project, states } = tc3Project(LINK);
@@ -264,6 +279,8 @@ describe('upgradeTc3ToBurrito — in place', () => {
     expect(byPath['oba/1.json'].operation).toBe('delete');
     // .apps/ checkData PRESERVED (safety net) — not in the commit at all
     expect(byPath['.apps/translationCore/checkData/selections/oba/1/1/x.json']).toBeUndefined();
+    // a user file under <book>/ is NOT a chapter-json marker → preserved
+    expect(byPath['oba/notes.md']).toBeUndefined();
     // neutral files untouched (not in the commit at all)
     expect(byPath['LICENSE.md']).toBeUndefined();
     expect(byPath['README.md']).toBeUndefined();
@@ -289,6 +306,14 @@ describe('upgradeTc3ToBurrito — in place', () => {
     store.projects[project.id] = project;
     store.states[project.id] = states;
     await expect(upgradeTc3ToBurrito(project.id, null, { mode: 'in-place' })).rejects.toThrow(/no longer exists/i);
+  });
+
+  it('refuses in-place when the remote repo changed since import', async () => {
+    const { project, states } = tc3Project({ owner: 'testuser', repo: 'en_rnb_oba_book', branch: 'master', lastSha: 'old-sha' });
+    store.projects[project.id] = project;
+    store.states[project.id] = states;
+    await expect(upgradeTc3ToBurrito(project.id, null, { mode: 'in-place' })).rejects.toThrow(/changed on Door43/i);
+    expect(commitFiles).not.toHaveBeenCalled();
   });
 
   it('refuses in-place when the project has no linked repo', async () => {
