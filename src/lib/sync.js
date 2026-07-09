@@ -89,7 +89,10 @@ async function resolveAuth(auth) {
 
 const readJson = (files, path) => (files[path] ? JSON.parse(strFromU8(files[path])) : null);
 
-function contextFromFiles(files) {
+// A burrito {path: bytes} map -> the stored import context App.loadProjectData
+// consumes (pins read from the checking/resources.json inside the map). Shared
+// with the tC3→burrito upgrade so both write the same context shape.
+export function contextFromFiles(files) {
   const resources = readJson(files, 'ingredients/checking/resources.json');
   return {
     metadata: readJson(files, 'metadata.json'),

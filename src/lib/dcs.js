@@ -166,7 +166,10 @@ export async function login(username, secret, deviceLabel = '') {
   const created = await api(`/users/${user.login}/tokens`, {
     basic,
     method: 'POST',
-    body: { name: tokenName, scopes: ['read:user', 'write:repository'] },
+    // write:user is required for POST /user/repos (createRepo on first sync /
+    // tC3→burrito export) — verified against live DCS: without it the create
+    // 403s "required=[write:user]". write:repository covers commit/tree/archive.
+    body: { name: tokenName, scopes: ['read:user', 'write:user', 'write:repository'] },
   });
   return { username: user.login, token: created.sha1, kind: 'pat' };
 }
