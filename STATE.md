@@ -269,9 +269,11 @@ Resolved:
   `src/lib/sync.loadchecks.test.js`, and the URL-construction test in `src/lib/door43.test.js`.
   BURRITO-SPEC §5.3 has no dedicated TWL-*list* pin slot (feedback item 2 above) — the
   `translationWords` pin names the `_tw` *articles* repo — so `fetchTwlTsv` derives the matching
-  `_twl` list repo (same owner/GL/version) from that pin. English resolves to `en_twl` exactly as
-  before; a non-en project (tC3 or burrito) now pins its TWL list correctly. Flagged by the PR #11
-  independent review.
+  `_twl` list repo (same owner/GL/version) from that pin. A GL that ships its own list (e.g.
+  `es-419_gl/es-419_twl`) now pins correctly; a GL owner that ships `_tw` but no paired `_twl`
+  (e.g. `Door43-Catalog/es-419_tw`) falls back to `en_twl` master, mirroring tC's English fallback —
+  so English and fallback cases resolve to `en_twl` exactly as before the pin was threaded. Flagged
+  by the PR #11 independent review.
 
 Known gaps / follow-ups:
 - **`syncTc3Project` itself (store + `loadChecks` wiring) is exercised only in-app**, not in the

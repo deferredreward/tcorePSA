@@ -164,25 +164,26 @@ check('round-trip: selection, comment, reminder survive the write -> read cycle'
 
 // ---------- 6. non-English tW GL: decision keys + round-trips against a pinned non-en TWL ----------
 // Regression for the PR #11 gap: a project that checked tW against a non-English
-// GL (here es-419 / Door43-Catalog). The tW pin now flows through fetchTwlTsv, so
-// the loaded tW checkIds match the seeded decision — and the emitted selection
-// carries the pin's GL, agreeing with the contextId instead of an en default.
+// GL (here es-419 / es-419_gl, which ships its own es-419_twl list). The tW pin
+// now flows through fetchTwlTsv, so the loaded tW checkIds match the seeded
+// decision — and the emitted selection carries the pin's GL, agreeing with the
+// contextId instead of an en default.
 {
   const esManifest = {
     project: { id: 'oba', name: 'Obadiah' },
     resource: { id: 'RNB', name: 'redneck obadiah' },
     tcInitialized: true, tc_version: 8,
     toolsSelectedGLs: { translationNotes: 'en', translationWords: 'es-419' },
-    toolsSelectedOwners: { translationNotes: 'unfoldingWord', translationWords: 'Door43-Catalog' },
+    toolsSelectedOwners: { translationNotes: 'unfoldingWord', translationWords: 'es-419_gl' },
     tc_en_check_version_translationNotes: 'v88_unfoldingWord',
-    'tc_es-419_check_version_translationWords': 'v10_Door43-Catalog',
+    'tc_es-419_check_version_translationWords': 'v10_es-419_gl',
   };
   const { pins: esPins } = importTc3(zipSync({
     'manifest.json': strToU8(JSON.stringify(esManifest)),
     'oba.usfm': strToU8(USFM),
   }));
-  check('es-419: manifest resolves the tW pin to Door43-Catalog/es-419_tw @ v10',
-    esPins.translationWords.repoPath === 'git.door43.org/Door43-Catalog/es-419_tw' &&
+  check('es-419: manifest resolves the tW pin to es-419_gl/es-419_tw @ v10',
+    esPins.translationWords.repoPath === 'git.door43.org/es-419_gl/es-419_tw' &&
     esPins.translationWords.version === 'v10' &&
     esPins.translationNotes.repoPath === 'git.door43.org/unfoldingWord/en_tn');
 
