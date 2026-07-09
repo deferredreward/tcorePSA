@@ -185,7 +185,10 @@ export async function upgradeTc3ToBurrito(projectId, auth, { mode = 'new-repo', 
     if (!repoInfo) {
       throw new Error(`${owner}/${repo} no longer exists on Door43 — use “Export to a new repo” instead.`);
     }
-    branch = project.dcs.branch || repoInfo.default_branch || 'master';
+    // Prefer the repo's LIVE default branch over the stored link: a branch
+    // renamed/deleted after import would otherwise resolve to null (looks empty)
+    // and we'd commit to the default without deleting the tC3 markers.
+    branch = repoInfo.default_branch || project.dcs.branch || 'master';
     const remoteSha = await dcs.getBranchSha(owner, repo, branch, auth.token);
     // Refuse if the repo moved on since import: an in-place rewrite builds from
     // the LOCAL (import-time) usfmText/states and would clobber whatever landed

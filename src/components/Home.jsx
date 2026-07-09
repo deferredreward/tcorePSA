@@ -324,7 +324,7 @@ export function Home({ onOpen, auth }) {
                 {syncStatus[p.id]}
               </div>
             )}
-            {upgradeMenu === p.id && (
+            {auth && upgradeMenu === p.id && (
               <div class="row" style="margin-top:6px" onClick={(e) => e.stopPropagation()}>
                 {p.dcs && p.dcs.owner?.toLowerCase() === auth.username?.toLowerCase() && (
                   <button

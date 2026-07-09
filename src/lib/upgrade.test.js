@@ -308,6 +308,17 @@ describe('upgradeTc3ToBurrito — in place', () => {
     await expect(upgradeTc3ToBurrito(project.id, null, { mode: 'in-place' })).rejects.toThrow(/no longer exists/i);
   });
 
+  it('commits to the repo live default branch, not a stale stored branch name', async () => {
+    // stored link points at a branch that no longer exists; getRepo says the
+    // real default is 'master' → the commit must target master
+    const { project, states } = tc3Project({ owner: 'testuser', repo: 'en_rnb_oba_book', branch: 'stale-branch', lastSha: 'remote-sha' });
+    store.projects[project.id] = project;
+    store.states[project.id] = states;
+    await upgradeTc3ToBurrito(project.id, null, { mode: 'in-place' });
+    const [, , payload] = commitFiles.mock.calls[0];
+    expect(payload.branch).toBe('master');
+  });
+
   it('refuses in-place when the remote repo changed since import', async () => {
     const { project, states } = tc3Project({ owner: 'testuser', repo: 'en_rnb_oba_book', branch: 'master', lastSha: 'old-sha' });
     store.projects[project.id] = project;
