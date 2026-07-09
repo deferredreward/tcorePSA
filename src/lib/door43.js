@@ -9,7 +9,11 @@ async function fetchCached(url) {
   const key = `url:${url}`;
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status} for ${url}`);
+      err.status = res.status;
+      throw err;
+    }
     const text = await res.text();
     set(key, text).catch(() => {});
     return text;
@@ -36,9 +40,27 @@ export function fetchTnTsv(bookCode, pin) {
   return fetchCached(pinnedUrl(pin, 'en_tn', `tn_${bookCode}.tsv`));
 }
 
-// The TWL list repo (en_twl) has no slot in the §5.3 pins — always master
-export function fetchTwlTsv(bookCode) {
-  return fetchCached(`${BASE}/en_twl/raw/branch/master/twl_${bookCode}.tsv`);
+// The TWL *list* (twl_<book>.tsv) lives in the `_twl` repo, but the project's
+// translationWords pin names the paired `_tw` *articles* repo (same owner/GL/
+// version — §5.3 has no dedicated TWL-list slot). Derive the list repo from that
+// pin so a GL that ships its own `_twl` (e.g. es-419_gl/es-419_twl) loads from
+// the matching release. Not every owner publishes one (e.g. Door43-Catalog ships
+// es-419_tw with no paired twl); tC falls back to English there, so we do too —
+// preserving the pre-pin behavior of always resolving against en_twl master.
+export async function fetchTwlTsv(bookCode, pin) {
+  const file = `twl_${bookCode}.tsv`;
+  if (pin?.repoPath) {
+    const listPin = { ...pin, repoPath: pin.repoPath.replace(/_tw$/, '_twl') };
+    try {
+      return await fetchCached(pinnedUrl(listPin, 'en_twl', file));
+    } catch (err) {
+      // Only a genuine 404 (GL ships no `_twl`, or that ref is gone) falls back
+      // to English, like tC. A network/5xx error must surface, not silently
+      // resolve against the wrong (English) list.
+      if (err?.status !== 404) throw err;
+    }
+  }
+  return fetchCached(pinnedUrl(null, 'en_twl', file));
 }
 
 // rcLink like rc://*/tw/dict/bible/kt/faith -> bible/kt/faith.md
