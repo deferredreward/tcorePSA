@@ -181,8 +181,8 @@ const burrito = { metadata: imp.metadata, files: imp.files, pins: imp.pins, sett
     appended.contextId.reference.verse === 15 && appended.category === 'translate' &&
     appended.contextId.occurrenceNote === 'A new check.' && appended.comments === 'revisar' &&
     appended.reminders === true && appended.selections === false && appended.status === 'todo');
-  check('merge: tN quote is a word-array; "&" becomes the ellipsis separator',
-    deepEq(appended.contextId.quote, [{ word: 'χάρις', occurrence: 1 }, { word: '…', occurrence: 1 }, { word: 'εἰρήνη', occurrence: 1 }]) &&
+  check('merge: tN quote is a word-array; "&" becomes a bare ellipsis marker (tC shape)',
+    deepEq(appended.contextId.quote, [{ word: 'χάρις', occurrence: 1 }, { word: '…' }, { word: 'εἰρήνη', occurrence: 1 }]) &&
     appended.contextId.quoteString === 'χάρις … εἰρήνη');
   check('merge: invalidated record left verbatim when untouched',
     tn.decisions.find((d) => d.contextId.checkId === 'gr8c').invalidated === true);
@@ -298,6 +298,16 @@ const burrito = { metadata: imp.metadata, files: imp.files, pins: imp.pins, sett
     tw.decisions.length === 1 && tw.decisions[0].contextId.checkId === 't1g7' && tw.decisions[0].status === 'valid');
   check('fresh: quoteToArray occurrence counts repeat within a quote',
     deepEq(quoteToArray('τοῦ Θεοῦ καὶ τοῦ'), [{ word: 'τοῦ', occurrence: 1 }, { word: 'Θεοῦ', occurrence: 1 }, { word: 'καὶ', occurrence: 1 }, { word: 'τοῦ', occurrence: 2 }]));
+  // Regression (OBA 1:5 figs-doublet w86v): a maqaf-joined quote must tokenize
+  // the way tC's group data does — split on "־", maqaf as its own token — or tC
+  // drops the decision (its findGroupDataItem deep-equals the quote array).
+  check('fresh: quoteToArray splits on the Hebrew maqaf like tC group data',
+    deepEq(quoteToArray('אִם־גַּנָּבִ֤ים בָּאֽוּ־לְ⁠ךָ֙ אִם־שׁ֣וֹדְדֵי לַ֔יְלָה'), [
+      { word: 'אִם', occurrence: 1 }, { word: '־', occurrence: 1 }, { word: 'גַּנָּבִ֤ים', occurrence: 1 },
+      { word: 'בָּאֽוּ', occurrence: 1 }, { word: '־', occurrence: 2 }, { word: 'לְ⁠ךָ֙', occurrence: 1 },
+      { word: 'אִם', occurrence: 2 }, { word: '־', occurrence: 3 }, { word: 'שׁ֣וֹדְדֵי', occurrence: 1 },
+      { word: 'לַ֔יְלָה', occurrence: 1 },
+    ]));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
