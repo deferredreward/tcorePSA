@@ -183,6 +183,28 @@ describe('upgradeTc3ToBurrito — new repo', () => {
     expect(store.projects[project.id].format).toBe('tc3'); // untouched
   });
 
+  it('reuses an empty repo from a failed prior attempt instead of blocking the retry', async () => {
+    const { project, states } = tc3Project();
+    store.projects[project.id] = project;
+    store.states[project.id] = states;
+    getRepo.mockReturnValueOnce({ name: 'oba_burrito', owner: { login: 'testuser' }, default_branch: 'master' });
+    getBranchSha.mockReturnValueOnce(null); // exists but empty (no commits)
+    const result = await upgradeTc3ToBurrito(project.id, null, { mode: 'new-repo', repoName: 'oba_burrito' });
+    expect(createRepo).not.toHaveBeenCalled(); // reused the empty repo, didn't recreate
+    expect(commitFiles).toHaveBeenCalledTimes(1);
+    expect(result.repo).toBe('oba_burrito');
+  });
+
+  it('counts only in-draft decisions as unmapped (out-of-scope verses excluded)', async () => {
+    const { project, states } = tc3Project();
+    states['tn-1:1-drifted'] = { selections: [{ text: 'x', occurrence: 1, occurrences: 1 }], modifiedAt: 't' }; // 1:1 in draft, id not fetched
+    states['tn-9:1-ghost'] = { selections: [{ text: 'y', occurrence: 1, occurrences: 1 }], modifiedAt: 't' }; // ch 9 not in draft
+    store.projects[project.id] = project;
+    store.states[project.id] = states;
+    const result = await upgradeTc3ToBurrito(project.id, null, { mode: 'new-repo', repoName: 'oba_burrito' });
+    expect(result.unmapped).toBe(1); // only the in-draft drifted decision
+  });
+
   it('carries the tC3 resource pins into resources.json (so check ids keep matching)', async () => {
     const { project, states } = tc3Project();
     store.projects[project.id] = project;

@@ -36,6 +36,7 @@ import * as dcs from './dcs';
 import { loadChecks, ensureFreshAuth, contextFromFiles } from './sync';
 import { getProject, saveProject, getCheckStates, saveBurrito, getDcsAuth } from './store';
 import { getActorId, getJournal } from './journal';
+import { getVerseText } from './verses';
 import { strToU8 } from 'fflate';
 
 // Build a burrito checking/resources.json (BURRITO-SPEC §5.3) from the tC3
@@ -166,8 +167,18 @@ export async function upgradeTc3ToBurrito(projectId, auth, { mode = 'new-repo', 
   // source repo untouched; in-place preserves .apps/ — see isTc3FormatMarker),
   // but those checks need re-confirming against the current resource.
   const fetchedIds = new Set([...tn, ...tw].map((c) => c.id));
+  // A decided state counts as unmapped only when its verse IS in the uploaded
+  // draft (so a check for it was expected) but no fetched check carries its id
+  // — i.e. genuine resource drift. A decision on an out-of-draft verse was
+  // filtered by loadChecks and was never eligible for the burrito, so it isn't
+  // "lost work" and must not read as "needs re-confirming".
+  const inDraft = (id) => {
+    const m = /^(?:tn|tw)-(\d+):(\d+)/.exec(id); // <tool>-<chapter>:<verse>-<checkId>
+    return !!m && getVerseText(project, Number(m[1]), Number(m[2])) != null;
+  };
   const unmapped = Object.entries(states).filter(
-    ([id, s]) => (s.selections?.length || s.comment || s.reminder || s.nothingToSelect) && !fetchedIds.has(id),
+    ([id, s]) =>
+      (s.selections?.length || s.comment || s.reminder || s.nothingToSelect) && !fetchedIds.has(id) && inDraft(id),
   ).length;
 
   // ---- resolve the target repo and commit ----
@@ -237,12 +248,15 @@ export async function upgradeTc3ToBurrito(projectId, auth, { mode = 'new-repo', 
     const defaultName = `${project.bookCode.toLowerCase()}_checks`;
     const name = (repoName || (promptRepoName ? promptRepoName(defaultName) : defaultName) || '').trim();
     if (!name) return { cancelled: true };
-    // Fail early and clearly on a name collision rather than letting createRepo
-    // surface a raw 409 (also catches a retry after a create-then-commit failure).
-    if (await dcs.getRepo(auth.username, name, auth.token)) {
+    // Refuse a real collision (a NON-EMPTY repo of that name) instead of letting
+    // createRepo surface a raw 409 — but REUSE an empty repo of that name (e.g.
+    // one left by a prior attempt whose commit failed after createRepo) so a
+    // retry isn't permanently blocked and no empty repo is stranded.
+    const existing = await dcs.getRepo(auth.username, name, auth.token);
+    if (existing && (await dcs.getBranchSha(auth.username, name, existing.default_branch || 'master', auth.token))) {
       throw new Error(`A repo named “${name}” already exists under @${auth.username} — pick a different name.`);
     }
-    const created = await dcs.createRepo(name, auth.token);
+    const created = existing || (await dcs.createRepo(name, auth.token));
     owner = created?.owner?.login || auth.username;
     repo = created?.name || name;
     branch = created?.default_branch || 'master';
