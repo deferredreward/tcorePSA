@@ -104,8 +104,9 @@ Known gaps / follow-ups (spun off as suggested tasks):
 - **Older tC3 projects without `checkId`** key only by group+quote+occurrence; those won't
   attach until re-anchored against the current resource — that fuzzy matcher is not built (the
   modern checkId path is what's verified).
-- **tW/tQ:** tW imports, but its checks fetch en_twl at master (existing gap below), so a tW
-  checkId may not match a pinned list; translationQuestions is not modeled and is skipped.
+- **tW/tQ:** tW imports and its checks now fetch the pinned TWL list (its per-tool pin is
+  threaded through `fetchTwlTsv`, so a non-en GL keys correctly — see resolved note below);
+  translationQuestions is not modeled and is skipped.
 
 ## tC3→Burrito upgrade — `src/lib/upgrade.js`
 
@@ -145,8 +146,7 @@ Design decisions:
   blindly.** Each tC3 decision was seeded into PWA states on import, and `buildBurritoFiles` re-emits
   the states as `checking/<tool>/<BOOK>.json` records. The catch (found in the PR#12 code review):
   `buildBurritoFiles`→`mergeDecisions` only emits a decision whose check **id still resolves at the
-  fetched resource version**, and (a) tW is always fetched at `en_twl` **master** (no pin support
-  yet), (b) pre-checkId tC3 projects seed nothing, (c) a decision on a verse outside the draft is
+  fetched resource version**, and (a) pre-checkId tC3 projects seed nothing, (b) a decision on a verse outside the draft is
   filtered by `loadChecks`. So the burrito can silently omit decisions. Two guards make "nothing is
   lost" true rather than aspirational:
   1. The source is never destroyed — **new-repo** leaves the tC3 repo untouched; **in-place**
@@ -258,18 +258,22 @@ Design decisions:
   a clear error rather than creating a malformed repo. Deliberately narrower than burrito sync's
   first-sync create-repo path.
 
+Resolved:
+- **Non-English tW GL now keys its decisions on sync-back** (was: `loadChecks`/`fetchTwlTsv`
+  fetched `en_twl` at master regardless of the per-tool tW pin, so for a project checked against a
+  non-en GL the fetched tW checkIds didn't match the seeded ones and those tW decisions silently
+  dropped). `fetchTwlTsv(bookCode, pin)` now takes the tW pin (mirroring `fetchTnTsv`), and
+  `loadChecks` threads `pins.translationWords` through it — so the loaded tW checkIds match the
+  seeded/keyed ones and the emitted `gatewayLanguageCode` agrees with the contextId. Covered by
+  the es-419 / Door43-Catalog case in `scripts/test-tc3.mjs` and the pin-threading assertion in
+  `src/lib/sync.loadchecks.test.js`. The burrito path is unaffected: BURRITO-SPEC §5.3 still has no
+  TWL-list pin slot (feedback item 2 above), so a burrito's tW pin is absent and `fetchTwlTsv`
+  falls back to master as before. Flagged by the PR #11 independent review.
+
 Known gaps / follow-ups:
 - **`syncTc3Project` itself (store + `loadChecks` wiring) is exercised only in-app**, not in the
   live node harness — the harness replicates the orchestrator's DCS steps but bypasses IndexedDB
   and the TSV fetch (it passes a synthetic check). The DCS write transport it drives is identical.
-- **Non-English tW GL loses its decisions on sync-back.** `loadChecks`/`fetchTwlTsv` fetch
-  `en_twl` at master regardless of the project's per-tool tW pin (the shared "en_twl has no pin
-  slot" gap). So for a project that checked tW against a non-en GL, the fetched tW checkIds won't
-  match the seeded ones, `states[check.id]` is undefined, and those tW decisions silently don't
-  emit — while any tW selection that *does* emit stamps a `gatewayLanguageCode` from the pin that
-  disagrees with its en-derived contextId. tN is unaffected (its pin is honored). Fixing needs a
-  tW-list pin threaded through `fetchTwlTsv` (also fixes the burrito path). Flagged by the PR #11
-  independent review.
 - **Decisions on checks absent from the current pinned list are not written** (the builder iterates
   the fetched checks and skips orphan states) — the same "older tC3 without `checkId`" re-anchor
   gap noted in the read section.

@@ -57,7 +57,7 @@ export function mergeStates(local, remote) {
 export async function loadChecks(project, pins) {
   const [tnTsv, twlTsv] = await Promise.all([
     fetchTnTsv(project.bookCode, pins?.translationNotes),
-    fetchTwlTsv(project.bookCode),
+    fetchTwlTsv(project.bookCode, pins?.translationWords),
   ]);
   const filter = (list) => list.filter((c) => getVerseText(project, c.chapter, c.verse) != null);
   const tnAll = parseTnChecks(tnTsv);

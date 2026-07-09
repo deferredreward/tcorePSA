@@ -36,9 +36,8 @@ export function fetchTnTsv(bookCode, pin) {
   return fetchCached(pinnedUrl(pin, 'en_tn', `tn_${bookCode}.tsv`));
 }
 
-// The TWL list repo (en_twl) has no slot in the §5.3 pins — always master
-export function fetchTwlTsv(bookCode) {
-  return fetchCached(`${BASE}/en_twl/raw/branch/master/twl_${bookCode}.tsv`);
+export function fetchTwlTsv(bookCode, pin) {
+  return fetchCached(pinnedUrl(pin, 'en_twl', `twl_${bookCode}.tsv`));
 }
 
 // rcLink like rc://*/tw/dict/bible/kt/faith -> bible/kt/faith.md
