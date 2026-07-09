@@ -171,6 +171,14 @@ Known gaps / follow-ups:
 - **`syncTc3Project` itself (store + `loadChecks` wiring) is exercised only in-app**, not in the
   live node harness — the harness replicates the orchestrator's DCS steps but bypasses IndexedDB
   and the TSV fetch (it passes a synthetic check). The DCS write transport it drives is identical.
+- **Non-English tW GL loses its decisions on sync-back.** `loadChecks`/`fetchTwlTsv` fetch
+  `en_twl` at master regardless of the project's per-tool tW pin (the shared "en_twl has no pin
+  slot" gap). So for a project that checked tW against a non-en GL, the fetched tW checkIds won't
+  match the seeded ones, `states[check.id]` is undefined, and those tW decisions silently don't
+  emit — while any tW selection that *does* emit stamps a `gatewayLanguageCode` from the pin that
+  disagrees with its en-derived contextId. tN is unaffected (its pin is honored). Fixing needs a
+  tW-list pin threaded through `fetchTwlTsv` (also fixes the burrito path). Flagged by the PR #11
+  independent review.
 - **Decisions on checks absent from the current pinned list are not written** (the builder iterates
   the fetched checks and skips orphan states) — the same "older tC3 without `checkId`" re-anchor
   gap noted in the read section.
