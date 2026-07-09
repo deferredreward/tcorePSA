@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:tc4": "node scripts/test-tc4.mjs"
+    "test:tc4": "node scripts/test-tc4.mjs",
+    "test:tc3": "node scripts/test-tc3.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.3",
