@@ -33,10 +33,22 @@ Known gaps:
 
 - **Multi-book exports update only the current book** — sibling books' decision files round-trip
   verbatim from import; states checked in a sibling PWA project are not merged in.
-- **tN quote arrays use within-quote occurrence counting**, exact only when the quote occurs
-  once in the verse — this tc4 path does not resolve quotes against the OL Bible. The English-gloss
-  path had the same root gap but was since fixed by adopting `uw-quote-helpers` (see below); this
-  path could adopt the same for exact per-word occurrences.
+- **tN quote arrays use within-quote occurrence counting**, exact only when the quote's words
+  don't recur earlier in the verse — this tc4 path does not resolve quotes against the OL Bible.
+  The English-gloss path had the same root gap but was since fixed by adopting `uw-quote-helpers`
+  (see below); this path could adopt the same for exact per-word occurrences.
+  - **Tokenization is now tC-faithful** (`quoteToArray`, `src/lib/tc4.js`): it tokenizes via
+    `string-punctuation-tokenizer`'s `tokenizeOrigLang` (same tokenizer tsv-groupdata-parser feeds
+    `getWordOccurrencesForQuote`), so it splits on the Hebrew **maqaf "־"** (maqaf as its own token)
+    and emits the `&` discontinuity as a bare `{word:'…'}` marker — verified byte-identical to
+    tsv-groupdata-parser's output. Before this, a plain `.split(' ')` kept maqaf-joined quotes as one
+    token, so the array never deep-equaled tC's group data and **tC silently dropped the decision**
+    (`findGroupDataItem`, `../translationCore/.../checkDataHelpers.js`, matches on the quote array,
+    not `checkId`). Surfaced live by OBA 1:5 figs-doublet `w86v` (maqaf) failing to sync into tC
+    while the two maqaf-free doublets `a8v3`/`cr23` did. Only the occurrence-vs-verse gap above
+    remains. NOTE: the append-only sync differ (`buildTc3CheckDataFiles`) keys on selection content,
+    not the contextId — so a no-op re-sync won't rewrite an already-pushed wrong-tokenized record;
+    the decision must be re-edited (or cleared+redone) to emit the corrected quote array.
 - **The en_ULT and UHB/UGNT used for English glosses are unpinned** (master) — §5.3 has no
   gateway-bible / original-language slot yet (`extraScripture` is not normative until tC4's first
   J2 increment).

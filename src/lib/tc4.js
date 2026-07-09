@@ -7,7 +7,10 @@
 // Pure module (no IndexedDB/DOM) so it runs in node tests as-is.
 
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
+import { tokenizeOrigLang } from 'string-punctuation-tokenizer';
 import { md5 } from './md5.js';
+
+const ELLIPSIS = '…';
 
 export const TOOL_IDS = { tn: 'translationNotes', tw: 'translationWords' };
 const DECISION_DIRS = ['translationWords', 'translationNotes', 'translationQuestions'];
@@ -53,24 +56,38 @@ function keyOfCheck(check, book) {
 }
 
 // Quote normalization for quoteString verification: zero-width spaces out,
-// TSV "&" and ellipsis are the same discontinuity separator
+// the three discontinuity spellings unified to one "…". tC treats "&" (TSV
+// break char), literal "..." and "…" alike (tsv-groupdata-parser rewrites "&"
+// then getWordOccurrencesForQuote / the quoteString both fold "..." to "…"), so
+// we fold all three here — otherwise quoteToArray would tokenize a "..." quote
+// into three "." tokens and never deep-equal tC's group data.
 export function normalizeQuote(quote) {
   const s = Array.isArray(quote) ? quote.map((w) => w.word).join(' ') : String(quote || '');
-  return s.replace(/​/g, '').replace(/\s*&\s*/g, ' … ').replace(/\s+/g, ' ').trim();
+  return s.replace(/​/g, '').replace(/\s*&\s*/g, ' … ').replace(/\.\.\./g, '…').replace(/\s+/g, ' ').trim();
 }
 
-// tN quote string -> [{word, occurrence}] array. Occurrence is the running
-// count within the quote — correct whenever the quote occurs once in the
-// verse (the TSV's Occurrence column covers the rest of the identity).
+// tN quote string -> [{word, occurrence}] array, tokenized EXACTLY as tC's group
+// data does. tsv-groupdata-parser feeds the quote through string-punctuation-
+// tokenizer's tokenizeOrigLang, which splits on whitespace AND the Hebrew maqaf
+// "־" (keeping the maqaf as its own token), and represents the "&" discontinuity
+// as a bare {word:'…'} marker (no occurrence). We reproduce that here off the same
+// tokenizer (already a dep) rather than pulling in tsv-groupdata-parser (which
+// drags fs into the browser bundle) — verified byte-identical to its
+// getWordOccurrencesForQuote across maqaf / word-joiner / discontiguous quotes.
+// This has to match: tC attaches a saved decision to a check by deep-equality of
+// this array (findGroupDataItem, checkDataHelpers.js), not by checkId. A plain
+// space split left maqaf-joined quotes (e.g. OBA 1:5 figs-doublet
+// "אִם־גַּנָּבִים …") as one token where tC has several, so the arrays never
+// matched and tC silently dropped the decision. Occurrence is the running count
+// within the quote — exact whenever the quote's words don't recur earlier in the
+// verse (the common verse-start case).
 export function quoteToArray(quote) {
   const counts = {};
-  return normalizeQuote(quote)
-    .split(' ')
-    .filter(Boolean)
-    .map((word) => {
-      counts[word] = (counts[word] || 0) + 1;
-      return { word, occurrence: counts[word] };
-    });
+  return tokenizeOrigLang({ text: normalizeQuote(quote), includePunctuation: true }).map((word) => {
+    if (word === ELLIPSIS) return { word };
+    counts[word] = (counts[word] || 0) + 1;
+    return { word, occurrence: counts[word] };
+  });
 }
 
 export function isDoneState(state) {
