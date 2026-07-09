@@ -71,6 +71,10 @@ function resourcesFromTc3(pins) {
         nt: { repoPath: 'git.door43.org/unfoldingWord/grc_ugnt', version: 'master', flavor: 'scripture/textTranslation' },
         ot: { repoPath: 'git.door43.org/unfoldingWord/hbo_uhb', version: 'master', flavor: 'scripture/textTranslation' },
       },
+      // the tW *articles* repo (en_tw) — the §5.3 translationWords slot, same as
+      // defaultResources. NOT the en_twl *list* (which words to check per verse):
+      // that has no §5.3 slot and is always fetched at master (see unmapped-count
+      // handling in upgradeTc3ToBurrito).
       translationWords: pin(tw, 'tw', 'parascriptural/x-bcvarticles'),
       translationNotes: pin(tn, 'tn', 'parascriptural/x-bcvnotes'),
       translationAcademy: pin(ta, 'ta', 'peripheral/x-peripheralArticles'),
