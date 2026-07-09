@@ -9,7 +9,11 @@ async function fetchCached(url) {
   const key = `url:${url}`;
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status} for ${url}`);
+      err.status = res.status;
+      throw err;
+    }
     const text = await res.text();
     set(key, text).catch(() => {});
     return text;
@@ -49,8 +53,11 @@ export async function fetchTwlTsv(bookCode, pin) {
     const listPin = { ...pin, repoPath: pin.repoPath.replace(/_tw$/, '_twl') };
     try {
       return await fetchCached(pinnedUrl(listPin, 'en_twl', file));
-    } catch {
-      // GL has no `_twl` (or that ref is gone) — fall back to English, like tC
+    } catch (err) {
+      // Only a genuine 404 (GL ships no `_twl`, or that ref is gone) falls back
+      // to English, like tC. A network/5xx error must surface, not silently
+      // resolve against the wrong (English) list.
+      if (err?.status !== 404) throw err;
     }
   }
   return fetchCached(pinnedUrl(null, 'en_twl', file));

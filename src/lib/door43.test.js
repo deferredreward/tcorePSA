@@ -42,6 +42,16 @@ describe('fetchTwlTsv URL construction', () => {
     expect(urls[1]).toBe('https://git.door43.org/unfoldingWord/en_twl/raw/branch/master/twl_OBA.tsv');
   });
 
+  it('propagates a non-404 failure instead of silently using the English list', async () => {
+    // a 5xx/transient error must surface — falling back would sync against the
+    // wrong check list and hide the real infrastructure problem
+    global.fetch = vi.fn(async (url) => { urls.push(url); return { ok: false, status: 500 }; });
+    await expect(
+      fetchTwlTsv('OBA', { repoPath: 'git.door43.org/es-419_gl/es-419_tw', version: 'v10' }),
+    ).rejects.toThrow();
+    expect(urls).toEqual(['https://git.door43.org/es-419_gl/es-419_twl/raw/tag/v10/twl_OBA.tsv']);
+  });
+
   it('falls back to en_twl master when unpinned', async () => {
     await fetchTwlTsv('OBA');
     expect(urls[0]).toBe('https://git.door43.org/unfoldingWord/en_twl/raw/branch/master/twl_OBA.tsv');
