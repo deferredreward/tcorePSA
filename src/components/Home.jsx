@@ -14,6 +14,7 @@ import { importBurrito, seedStatesFromDecisions } from '../lib/tc4';
 import { detectProjectFormat, importTc3 } from '../lib/tc3';
 import { syncProject, fetchProjectFromDcs, listMyRepos, describeSyncResult } from '../lib/sync';
 import { upgradeTc3ToBurrito } from '../lib/upgrade';
+import { syncTc3Project } from '../lib/tc3Sync';
 
 export function Home({ onOpen, auth }) {
   const [projects, setProjects] = useState([]);
@@ -146,12 +147,19 @@ export function Home({ onOpen, auth }) {
     }
   }
 
-  async function sync(projectId) {
+  // Two isolated sync pipelines, routed on project.format: a tC3 project writes
+  // its decisions back to its source Door43 repo in tC3's native checkData
+  // layout (tc3Sync); everything else round-trips as a Scripture Burrito (sync).
+  async function sync(project) {
+    const projectId = project.id;
     setSyncStatus((s) => ({ ...s, [projectId]: 'Syncing…' }));
     try {
-      const result = await syncProject(projectId, auth, {
-        promptRepoName: (dflt) => prompt('Door43 repository name for this project:', dflt),
-      });
+      const result =
+        project.format === 'tc3'
+          ? await syncTc3Project(projectId, auth)
+          : await syncProject(projectId, auth, {
+              promptRepoName: (dflt) => prompt('Door43 repository name for this project:', dflt),
+            });
       setSyncStatus((s) => ({ ...s, [projectId]: describeSyncResult(result) }));
       await refresh();
     } catch (err) {
@@ -345,15 +353,15 @@ export function Home({ onOpen, auth }) {
               </div>
             )}
           </div>
-          {auth && p.format !== 'tc3' && (
+          {auth && (
             <button
               class="secondary"
               style="padding:6px 10px"
-              title="Sync with Door43"
+              title={p.format === 'tc3' ? 'Sync decisions to Door43 (tC3)' : 'Sync with Door43'}
               disabled={syncStatus[p.id] === 'Syncing…'}
               onClick={(e) => {
                 e.stopPropagation();
-                sync(p.id);
+                sync(p);
               }}
             >
               ⇅
